@@ -1,4 +1,5 @@
 #include "messaging.h"
+#include "earth.h"
 #include "settings.h"
 #include "solarUtils.h"
 #include <pebble.h>
@@ -124,6 +125,12 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
       dict_find(iterator, MESSAGE_KEY_ALT_CITY2_UTC_OFFSET);
   Tuple *localUtcOffset_tuple =
       dict_find(iterator, MESSAGE_KEY_LOCAL_UTC_OFFSET);
+  Tuple *region_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_REGION);
+  Tuple *showSolarRing_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_SHOW_SOLAR_RING);
+  Tuple *textOutlineStyle_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_TEXT_OUTLINE_STYLE);
+  Tuple *infoLayout_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_INFO_LAYOUT);
 
   if (timeColor_tuple != NULL) {
     globalSettings.timeColor = GColorFromHEX(timeColor_tuple->value->int32);
@@ -342,6 +349,36 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   if (localUtcOffset_tuple != NULL) {
     globalSettings.localUtcOffset =
         (int16_t)localUtcOffset_tuple->value->int32;
+  }
+
+  if (region_tuple != NULL) {
+    uint8_t region = (uint8_t)region_tuple->value->int8;
+    globalSettings.region = region < EARTH_NUM_REGIONS ? region : 0;
+    APP_LOG(APP_LOG_LEVEL_INFO, "Received region: %d",
+            (int)globalSettings.region);
+  }
+
+  if (showSolarRing_tuple != NULL) {
+    globalSettings.showSolarRing = (bool)showSolarRing_tuple->value->int8;
+    APP_LOG(APP_LOG_LEVEL_INFO, "Received showSolarRing: %d",
+            globalSettings.showSolarRing);
+  }
+
+  if (textOutlineStyle_tuple != NULL) {
+    uint8_t style = (uint8_t)textOutlineStyle_tuple->value->int8;
+    globalSettings.textOutlineStyle =
+        style == TEXT_OUTLINE_WHITE_WITH_BLACK ? TEXT_OUTLINE_WHITE_WITH_BLACK
+                                               : TEXT_OUTLINE_BLACK_WITH_WHITE;
+    APP_LOG(APP_LOG_LEVEL_INFO, "Received textOutlineStyle: %d",
+            (int)globalSettings.textOutlineStyle);
+  }
+
+  if (infoLayout_tuple != NULL) {
+    strncpy(globalSettings.infoLayout, infoLayout_tuple->value->cstring,
+            INFO_LAYOUT_LEN);
+    globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
+    APP_LOG(APP_LOG_LEVEL_INFO, "Received infoLayout: %s",
+            globalSettings.infoLayout);
   }
 
   Settings_saveToStorage();

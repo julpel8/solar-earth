@@ -23,6 +23,17 @@
 #define EARTH_UPDATE_SLICE_DELAY_MS 15
 #define EARTH_UPDATE_ROWS_PER_SLICE 3
 
+#define INFO_SLOT_UPPER_SECONDARY 0
+#define INFO_SLOT_UPPER_PRIMARY 1
+#define INFO_SLOT_TIME 2
+#define INFO_SLOT_LOWER_PRIMARY 3
+#define INFO_SLOT_LOWER_SECONDARY 4
+#define INFO_SLOT_COUNT 5
+
+#define INFO_GROUP_TOP 0
+#define INFO_GROUP_CENTER 1
+#define INFO_GROUP_BOTTOM 2
+
 // windows and layers
 static Window *mainWindow;
 static Layer *windowLayer;
@@ -32,16 +43,120 @@ static Layer *ringLayer;
 static Layer *infoLayer;
 static BitmapLayer *earthLayer;   // globe disc, between centre bg and the time
 static GBitmap *earthBitmap;
+static GBitmap *earthDisplayBitmap;
+static GSize s_earth_display_size = {0, 0};
+static bool s_earth_display_dirty = true;
+static uint8_t s_loaded_earth_region = 0xFF;
+static bool s_loaded_show_solar_ring = true;
 static bool s_quick_view_visible = false;
+
+static GRect get_center_frame(GRect bounds) {
+  int inset = globalSettings.showSolarRing ? EDGE_THICKNESS : 0;
+  return GRect(bounds.origin.x + inset, bounds.origin.y + inset,
+               bounds.size.w - inset * 2, bounds.size.h - inset * 2);
+}
+
+// Globe display size: native bitmap size when the ring is shown, else scaled
+// up (preserving aspect ratio) to span the full centre frame width.
+static GSize compute_earth_display_size(GRect centerFrame) {
+  GSize src = gbitmap_get_bounds(earthBitmap).size;
+  if (globalSettings.showSolarRing || src.w <= 0) return src;
+  GSize displaySize = {centerFrame.size.w,
+                       (int16_t)((int32_t)centerFrame.size.w * src.h / src.w)};
+  return displaySize;
+}
 
 // Centre the globe bitmap inside the given centre frame.
 static void position_earth_layer(GRect centerFrame) {
   if (!earthLayer || !earthBitmap) return;
-  GRect eb = gbitmap_get_bounds(earthBitmap);
-  int ex = centerFrame.origin.x + (centerFrame.size.w - eb.size.w) / 2;
-  int ey = centerFrame.origin.y + (centerFrame.size.h - eb.size.h) / 2;
+  GSize displaySize = compute_earth_display_size(centerFrame);
+
+  int ex = centerFrame.origin.x + (centerFrame.size.w - displaySize.w) / 2;
+  int ey = centerFrame.origin.y + (centerFrame.size.h - displaySize.h) / 2;
   layer_set_frame(bitmap_layer_get_layer(earthLayer),
-                  GRect(ex, ey, eb.size.w, eb.size.h));
+                  GRect(ex, ey, displaySize.w, displaySize.h));
+}
+
+static uint8_t get_4bit_pixel(const uint8_t *data, uint16_t bytesPerRow,
+                              int x, int y) {
+  return pixel4_get(data[y * bytesPerRow + x / 2], x % 2);
+}
+
+static void set_4bit_pixel(uint8_t *data, uint16_t bytesPerRow, int x, int y,
+                           uint8_t value) {
+  uint8_t *packed = &data[y * bytesPerRow + x / 2];
+  *packed = pixel4_set(*packed, x % 2, value);
+}
+
+static void destroy_earth_display_bitmap(void) {
+  if (earthDisplayBitmap) {
+    gbitmap_destroy(earthDisplayBitmap);
+    earthDisplayBitmap = NULL;
+  }
+  s_earth_display_size = GSize(0, 0);
+  s_earth_display_dirty = true;
+}
+
+static GBitmap *get_earth_display_bitmap(GSize displaySize) {
+  if (!earthBitmap) return NULL;
+
+  GRect sourceBounds = gbitmap_get_bounds(earthBitmap);
+  if (globalSettings.showSolarRing ||
+      (displaySize.w == sourceBounds.size.w &&
+       displaySize.h == sourceBounds.size.h)) {
+    destroy_earth_display_bitmap();  // scaled copy no longer needed
+    return earthBitmap;
+  }
+
+  if (gbitmap_get_format(earthBitmap) != GBitmapFormat4BitPalette) {
+    return earthBitmap;
+  }
+
+  bool sizeChanged = !earthDisplayBitmap ||
+                     s_earth_display_size.w != displaySize.w ||
+                     s_earth_display_size.h != displaySize.h;
+  if (sizeChanged) {
+    destroy_earth_display_bitmap();
+    earthDisplayBitmap =
+        gbitmap_create_blank(displaySize, gbitmap_get_format(earthBitmap));
+    if (!earthDisplayBitmap) return earthBitmap;
+
+    GColor *palette = gbitmap_get_palette(earthBitmap);
+    if (palette) gbitmap_set_palette(earthDisplayBitmap, palette, false);
+    s_earth_display_size = displaySize;
+    s_earth_display_dirty = true;
+  }
+
+  if (s_earth_display_dirty && earthDisplayBitmap) {
+    const uint8_t *sourceData = gbitmap_get_data(earthBitmap);
+    uint8_t *displayData = gbitmap_get_data(earthDisplayBitmap);
+    uint16_t sourceBytesPerRow = gbitmap_get_bytes_per_row(earthBitmap);
+    uint16_t displayBytesPerRow = gbitmap_get_bytes_per_row(earthDisplayBitmap);
+
+    memset(displayData, 0, displayBytesPerRow * displaySize.h);
+    for (int y = 0; y < displaySize.h; y++) {
+      int sourceY = (int32_t)y * sourceBounds.size.h / displaySize.h;
+      for (int x = 0; x < displaySize.w; x++) {
+        int sourceX = (int32_t)x * sourceBounds.size.w / displaySize.w;
+        uint8_t pixel =
+            get_4bit_pixel(sourceData, sourceBytesPerRow, sourceX, sourceY);
+        set_4bit_pixel(displayData, displayBytesPerRow, x, y, pixel);
+      }
+    }
+    s_earth_display_dirty = false;
+  }
+
+  return earthDisplayBitmap ? earthDisplayBitmap : earthBitmap;
+}
+
+static void refresh_earth_layer(GRect centerFrame) {
+  if (!earthLayer || !earthBitmap) return;
+  GSize displaySize = compute_earth_display_size(centerFrame);
+
+  GBitmap *displayBitmap = get_earth_display_bitmap(displaySize);
+  bitmap_layer_set_bitmap(earthLayer, displayBitmap);
+  position_earth_layer(centerFrame);
+  layer_mark_dirty(bitmap_layer_get_layer(earthLayer));
 }
 
 // Time string (populated each tick)
@@ -61,7 +176,13 @@ typedef struct {
   int height; // true pixel height from metrics
   int offset; // top dead-space offset from metrics
   GColor color;
+  uint8_t group;
 } SlotDescriptor;
+
+typedef struct {
+  uint8_t id;
+  uint8_t group;
+} InfoLayoutItem;
 
 // Buffer storage for each of the 4 widget slots. Populated by
 // update_widget_text() on the minute tick / settings change, then read by
@@ -95,6 +216,81 @@ static void update_widget_text(void) {
                     WIDGET_TEXT_LEN);
   } else {
     widgetTextLS[0] = '\0';
+  }
+}
+
+static bool parse_info_layout(const char *layout, InfoLayoutItem *items,
+                              int *count) {
+  if (!layout || !layout[0]) return false;
+
+  bool seen[INFO_SLOT_COUNT] = {false};
+  bool has_time = false;
+  int n = 0;
+  const char *p = layout;
+
+  while (*p) {
+    if (n >= INFO_SLOT_COUNT) return false;
+    if (p[0] < '0' || p[0] > '4' || p[1] != ':' || p[2] < '0' ||
+        p[2] > '2') {
+      return false;
+    }
+
+    uint8_t id = (uint8_t)(p[0] - '0');
+    uint8_t group = (uint8_t)(p[2] - '0');
+    if (seen[id]) return false;
+    seen[id] = true;
+    if (id == INFO_SLOT_TIME) has_time = true;
+
+    items[n].id = id;
+    items[n].group = group;
+    n++;
+    p += 3;
+
+    if (*p == ',') {
+      p++;
+    } else if (*p != '\0') {
+      return false;
+    }
+  }
+
+  if (!has_time || n == 0) return false;
+  *count = n;
+  return true;
+}
+
+static int get_info_layout(InfoLayoutItem *items) {
+  int count = 0;
+  if (parse_info_layout(globalSettings.infoLayout, items, &count)) {
+    return count;
+  }
+
+  parse_info_layout(DEFAULT_INFO_LAYOUT, items, &count);
+  return count;
+}
+
+static int slot_group_height(SlotDescriptor *slots, int count, uint8_t group) {
+  int height = 0;
+  int visible = 0;
+  for (int i = 0; i < count; i++) {
+    if (slots[i].group != group) continue;
+    if (visible > 0) height += LINE_PADDING;
+    height += slots[i].height;
+    visible++;
+  }
+  return height;
+}
+
+static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
+                                GRect frame, GColor color);
+
+static void draw_slot_group(GContext *ctx, SlotDescriptor *slots, int count,
+                            uint8_t group, int y, int width) {
+  for (int i = 0; i < count; i++) {
+    SlotDescriptor *s = &slots[i];
+    if (s->group != group) continue;
+    draw_text_with_halo(ctx, s->text, s->font,
+                        GRect(0, y - s->offset, width, s->height), s->color);
+    y += s->height + LINE_PADDING;
   }
 }
 
@@ -134,20 +330,26 @@ static void earth_update_timer_callback(void *data) {
   bool done = earth_update_step(EARTH_UPDATE_ROWS_PER_SLICE);
   if (done) {
     s_last_earth_update_time = time(NULL);
-    if (earthLayer) layer_mark_dirty(bitmap_layer_get_layer(earthLayer));
+    s_earth_display_dirty = true;
+    if (centerLayer) {
+      refresh_earth_layer(layer_get_frame(centerLayer));
+    } else if (earthLayer) {
+      layer_mark_dirty(bitmap_layer_get_layer(earthLayer));
+    }
     APP_LOG(APP_LOG_LEVEL_INFO, "Earth shading update complete");
   } else {
     schedule_earth_update_slice(EARTH_UPDATE_SLICE_DELAY_MS);
   }
 }
 
-// Draw text with a fixed white halo and black fill so it stays readable over
-// the globe without depending on the selected theme colours.
+// Draw text with a fixed halo so it stays readable over the globe.
 static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
                                 GRect frame, GColor color) {
   (void)color;
-  GColor halo = GColorWhite;
-  GColor text_color = GColorBlack;
+  bool whiteText =
+      globalSettings.textOutlineStyle == TEXT_OUTLINE_WHITE_WITH_BLACK;
+  GColor halo = whiteText ? GColorBlack : GColorWhite;
+  GColor text_color = whiteText ? GColorWhite : GColorBlack;
   static const int dx[] = {-1, 1, 0, 0, -1, -1, 1, 1};
   static const int dy[] = {0, 0, -1, 1, -1, 1, -1, 1};
   graphics_context_set_text_color(ctx, halo);
@@ -202,85 +404,105 @@ static void draw_center_text(Layer *layer, GContext *ctx) {
                               ? globalSettings.nightSubtextSecondaryColor
                               : globalSettings.subtextSecondaryColor;
 
-  // ---- Build ordered slot list (top to bottom) ----
-  // We use a fixed-size array and fill only active (non-empty) slots.
-#define MAX_SLOTS 5
-  SlotDescriptor slots[MAX_SLOTS];
+  // ---- Build ordered slot list from the configurable layout ----
+#define MAX_SLOTS INFO_SLOT_COUNT
+  InfoLayoutItem layout_items[INFO_SLOT_COUNT];
+  int layout_count = get_info_layout(layout_items);
+  SlotDescriptor slots[INFO_SLOT_COUNT];
   int num_slots = 0;
+  bool time_pushed = false;
 
 // Helper macro to push a slot
-#define PUSH_SLOT(txt, fnt, h, off, col)                                       \
+#define PUSH_SLOT(txt, fnt, h, off, col, grp)                                  \
   do {                                                                         \
-    slots[num_slots].text = (txt);                                             \
-    slots[num_slots].font = (fnt);                                             \
-    slots[num_slots].height = (h);                                             \
-    slots[num_slots].offset = (off);                                           \
-    slots[num_slots].color = (col);                                            \
-    num_slots++;                                                               \
+    if (num_slots < MAX_SLOTS) {                                               \
+      slots[num_slots].text = (txt);                                           \
+      slots[num_slots].font = (fnt);                                           \
+      slots[num_slots].height = (h);                                           \
+      slots[num_slots].offset = (off);                                         \
+      slots[num_slots].color = (col);                                          \
+      slots[num_slots].group = (grp);                                          \
+      num_slots++;                                                             \
+    }                                                                          \
   } while (0)
 
-  // Upper secondary (topmost)
-  if (!s_quick_view_visible && widgetTextUS[0] != '\0') {
-    PUSH_SLOT(widgetTextUS,
-              globalSettings.usePrimaryFontForAllWidgets ? primary_font
-                                                          : secondary_font,
-              globalSettings.usePrimaryFontForAllWidgets ? primary_height
-                                                          : secondary_height,
-              globalSettings.usePrimaryFontForAllWidgets ? primary_offset
-                                                          : secondary_offset,
-              secondaryColor);
+  for (int i = 0; i < layout_count; i++) {
+    uint8_t group = layout_items[i].group;
+    switch (layout_items[i].id) {
+      case INFO_SLOT_UPPER_SECONDARY:
+        if (!s_quick_view_visible && widgetTextUS[0] != '\0') {
+          PUSH_SLOT(widgetTextUS,
+                    globalSettings.usePrimaryFontForAllWidgets ? primary_font
+                                                                : secondary_font,
+                    globalSettings.usePrimaryFontForAllWidgets ? primary_height
+                                                                : secondary_height,
+                    globalSettings.usePrimaryFontForAllWidgets ? primary_offset
+                                                                : secondary_offset,
+                    secondaryColor, group);
+        }
+        break;
+      case INFO_SLOT_UPPER_PRIMARY:
+        if (widgetTextUP[0] != '\0') {
+          PUSH_SLOT(widgetTextUP, primary_font, primary_height, primary_offset,
+                    primaryColor, group);
+        }
+        break;
+      case INFO_SLOT_TIME:
+        PUSH_SLOT(timeText, time_font, time_height, time_offset, timeColor,
+                  group);
+        time_pushed = true;
+        break;
+      case INFO_SLOT_LOWER_PRIMARY:
+        if (widgetTextLP[0] != '\0') {
+          PUSH_SLOT(widgetTextLP, primary_font, primary_height, primary_offset,
+                    primaryColor, group);
+        }
+        break;
+      case INFO_SLOT_LOWER_SECONDARY:
+        if (!s_quick_view_visible && widgetTextLS[0] != '\0') {
+          PUSH_SLOT(widgetTextLS,
+                    globalSettings.usePrimaryFontForAllWidgets ? primary_font
+                                                                : secondary_font,
+                    globalSettings.usePrimaryFontForAllWidgets ? primary_height
+                                                                : secondary_height,
+                    globalSettings.usePrimaryFontForAllWidgets ? primary_offset
+                                                                : secondary_offset,
+                    secondaryColor, group);
+        }
+        break;
+    }
   }
 
-  // Upper primary
-  if (widgetTextUP[0] != '\0') {
-    PUSH_SLOT(widgetTextUP, primary_font, primary_height, primary_offset,
-              primaryColor);
-  }
-
-  // Time (always present)
-  PUSH_SLOT(timeText, time_font, time_height, time_offset, timeColor);
-
-  // Lower primary
-  if (widgetTextLP[0] != '\0') {
-    PUSH_SLOT(widgetTextLP, primary_font, primary_height, primary_offset,
-              primaryColor);
-  }
-
-  // Lower secondary (bottommost)
-  if (!s_quick_view_visible && widgetTextLS[0] != '\0') {
-    PUSH_SLOT(widgetTextLS,
-              globalSettings.usePrimaryFontForAllWidgets ? primary_font
-                                                          : secondary_font,
-              globalSettings.usePrimaryFontForAllWidgets ? primary_height
-                                                          : secondary_height,
-              globalSettings.usePrimaryFontForAllWidgets ? primary_offset
-                                                          : secondary_offset,
-              secondaryColor);
+  if (!time_pushed) {
+    PUSH_SLOT(timeText, time_font, time_height, time_offset, timeColor,
+              INFO_GROUP_CENTER);
   }
 
 #undef PUSH_SLOT
 #undef MAX_SLOTS
 
-  // ---- Compute total height (with padding between each slot) ----
-  int total_height = 0;
-  for (int i = 0; i < num_slots; i++) {
-    total_height += slots[i].height;
-    if (i < num_slots - 1) {
-      total_height += LINE_PADDING;
-    }
+  int top_height = slot_group_height(slots, num_slots, INFO_GROUP_TOP);
+  int center_height = slot_group_height(slots, num_slots, INFO_GROUP_CENTER);
+  int bottom_height = slot_group_height(slots, num_slots, INFO_GROUP_BOTTOM);
+
+  int top_y = 2;
+  int bottom_y = bounds.size.h - bottom_height - 2;
+  int center_top = top_y + top_height + (top_height > 0 ? LINE_PADDING : 0);
+  int center_bottom = bottom_y - (bottom_height > 0 ? LINE_PADDING : 0);
+  if (bottom_y < center_top) bottom_y = center_top;
+  if (center_bottom < center_top) center_bottom = center_top;
+
+  int center_area_height = center_bottom - center_top;
+  int center_y = center_top;
+  if (center_area_height > center_height) {
+    center_y += (center_area_height - center_height) / 2;
   }
 
-  // ---- Vertically center the block ----
-  int y = (bounds.size.h - total_height) / 2;
-
-  // ---- Draw each slot ----
-  for (int i = 0; i < num_slots; i++) {
-    SlotDescriptor *s = &slots[i];
-    draw_text_with_halo(ctx, s->text, s->font,
-                        GRect(0, y - s->offset, bounds.size.w, s->height),
-                        s->color);
-    y += s->height + LINE_PADDING;
-  }
+  draw_slot_group(ctx, slots, num_slots, INFO_GROUP_TOP, top_y, bounds.size.w);
+  draw_slot_group(ctx, slots, num_slots, INFO_GROUP_CENTER, center_y,
+                  bounds.size.w);
+  draw_slot_group(ctx, slots, num_slots, INFO_GROUP_BOTTOM, bottom_y,
+                  bounds.size.w);
 }
 
 // Resize literally everything on quick view
@@ -295,15 +517,14 @@ static void quickViewLayerReposition() {
                   GRect(0, 0, full_bounds.size.w, bounds.size.h));
   layer_set_frame(ringLayer, GRect(0, 0, full_bounds.size.w, bounds.size.h));
 
-  GRect centerFrame = GRect(EDGE_THICKNESS, EDGE_THICKNESS,
-                            full_bounds.size.w - 2 * EDGE_THICKNESS,
-                            bounds.size.h - 2 * EDGE_THICKNESS);
+  GRect centerFrame = get_center_frame(
+      GRect(0, 0, full_bounds.size.w, bounds.size.h));
   layer_set_frame(centerLayer, centerFrame);
 
   layer_set_frame(infoLayer, GRect(0, centerFrame.origin.y, full_bounds.size.w,
                                    centerFrame.size.h));
 
-  position_earth_layer(centerFrame);
+  refresh_earth_layer(centerFrame);
 
   // Mark everything as dirty to redraw
   layer_mark_dirty(ringLayer);
@@ -338,8 +559,13 @@ static void update_clock() {
   update_widget_text();
 
   // ensure colors are updated based on settings
-  window_set_background_color(mainWindow,
-                              getCurrentColorTheme().ringStrokeColor);
+  ColorTheme currentTheme = getCurrentColorTheme();
+  window_set_background_color(
+      mainWindow, globalSettings.showSolarRing ? currentTheme.ringStrokeColor
+                                               : currentTheme.bgColor);
+  if (earthLayer) {
+    bitmap_layer_set_background_color(earthLayer, currentTheme.bgColor);
+  }
 
   // if sunrise/sunset has not yet been calculated, do that
   if (currentSolarInfo.sunriseMinute == DEFAULT_SUNRISE_TIME &&
@@ -360,12 +586,31 @@ static void update_clock() {
 void onSettingsChanged() {
   solarUtils_recalculateSolarData();
 
-  // Region may have changed — reload the globe for the new centre.
-  cancel_earth_update_timer();
-  earthBitmap = earth_set_region(globalSettings.region);
-  if (earthLayer) bitmap_layer_set_bitmap(earthLayer, earthBitmap);
-  s_last_earth_update_time = 0;
-  start_earth_update_async(time(NULL), true);
+  bool regionChanged =
+      !earthBitmap || s_loaded_earth_region != globalSettings.region;
+  bool ringLayoutChanged =
+      s_loaded_show_solar_ring != globalSettings.showSolarRing;
+  s_loaded_show_solar_ring = globalSettings.showSolarRing;
+
+  if (regionChanged) {
+    cancel_earth_update_timer();
+    destroy_earth_display_bitmap();
+    earthBitmap = earth_set_region(globalSettings.region);
+    s_loaded_earth_region = globalSettings.region;
+    s_last_earth_update_time = 0;
+  }
+
+  if (earthLayer) {
+    bitmap_layer_set_background_color(earthLayer, getCurrentColorTheme().bgColor);
+  }
+
+  if (windowLayer && (regionChanged || ringLayoutChanged)) {
+    quickViewLayerReposition();
+  }
+
+  if (regionChanged) {
+    start_earth_update_async(time(NULL), true);
+  }
 
   update_clock();
 }
@@ -386,16 +631,17 @@ static void main_window_load(Window *window) {
 
   // get information about the Window
   windowLayer = window_get_root_layer(window);
-  window_set_background_color(window, getCurrentColorTheme().ringStrokeColor);
+  ColorTheme currentTheme = getCurrentColorTheme();
+  window_set_background_color(
+      window, globalSettings.showSolarRing ? currentTheme.ringStrokeColor
+                                           : currentTheme.bgColor);
   GRect bounds = layer_get_bounds(windowLayer);
 
   shiftingLayer = layer_create(bounds);
   layer_add_child(windowLayer, shiftingLayer);
 
   // create central rectangle
-  GRect centerFrame = GRect(
-      bounds.origin.x + EDGE_THICKNESS, bounds.origin.y + EDGE_THICKNESS,
-      bounds.size.w - EDGE_THICKNESS * 2, bounds.size.h - EDGE_THICKNESS * 2);
+  GRect centerFrame = get_center_frame(bounds);
   centerLayer = layer_create(centerFrame);
   layer_set_update_proc(centerLayer, draw_center_layer);
 
@@ -403,12 +649,13 @@ static void main_window_load(Window *window) {
 
   // Earth globe — sits above the centre background, below the time text.
   earthBitmap = earth_init(globalSettings.region);
+  s_loaded_earth_region = globalSettings.region;
+  s_loaded_show_solar_ring = globalSettings.showSolarRing;
   earthLayer = bitmap_layer_create(centerFrame);
-  bitmap_layer_set_bitmap(earthLayer, earthBitmap);
   bitmap_layer_set_compositing_mode(earthLayer, GCompOpSet);
-  bitmap_layer_set_background_color(earthLayer, GColorBlack);
+  bitmap_layer_set_background_color(earthLayer, currentTheme.bgColor);
   layer_add_child(shiftingLayer, bitmap_layer_get_layer(earthLayer));
-  position_earth_layer(centerFrame);
+  refresh_earth_layer(centerFrame);
 
   infoLayer = layer_create(
       GRect(0, centerFrame.origin.y, bounds.size.w, centerFrame.size.h));
@@ -440,6 +687,7 @@ static void main_window_unload(Window *window) {
   layer_destroy(ringLayer);
   layer_destroy(infoLayer);
   bitmap_layer_destroy(earthLayer);
+  destroy_earth_display_bitmap();
   earth_destroy();
   layer_destroy(centerLayer);
   layer_destroy(shiftingLayer);

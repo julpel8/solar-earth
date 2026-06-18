@@ -28,15 +28,21 @@ OUTDIR = os.path.join(ROOT, "resources", "images")
 
 DISC = 150            # globe diameter in px (fits emery centre ~154x182)
 
-# Day palette: clean two-tone (reads best at ~150px / 4-bit).
+# These colours no longer drive what the watch shows: earth.c overwrites the
+# displayed palette at runtime (it is the single source of truth). They only
+# need to keep each pixel *classifiable*, since the C side reads the PNG
+# palette to tell ocean from land and cities from dark areas.
+#
+# Day classifier (earth.c is_day_ocean_color): ocean must stay blue-dominant.
 OCEAN = (20, 86, 160)
 LAND = (46, 124, 50)
 
-# Night palette: dark earth + warm city lights.
-NIGHT_OCEAN = (7, 18, 40)
-NIGHT_LAND = (14, 30, 18)
-CITY_DIM = (170, 116, 40)
-CITY_BRIGHT = (255, 224, 130)
+# Night classifier (earth.c city_index_for_night_color): cities must keep high
+# red/green so they map to the dim/bright city colours; ocean/land stay dark.
+NIGHT_OCEAN = (0, 0, 85)
+NIGHT_LAND = (85, 0, 0)
+CITY_DIM = (255, 170, 0)
+CITY_BRIGHT = (255, 255, 85)
 
 REGIONS = {
     "europe":   (50.0,   10.0),

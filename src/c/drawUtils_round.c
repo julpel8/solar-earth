@@ -16,6 +16,8 @@ void draw_center_layer(Layer *layer, GContext *ctx) {
   graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, bounds.size.w / 2,
                        0, TRIG_MAX_ANGLE);
 
+  if (!globalSettings.showSolarRing) return;
+
   // Parameters for pips
   int numPips = 24;        // Number of pips (adjust as needed)
   int pip_length = 3;      // Length for smaller pips
@@ -63,6 +65,8 @@ void draw_center_layer(Layer *layer, GContext *ctx) {
 }
 
 void draw_ring_layer(Layer *layer, GContext *ctx) {
+  if (!globalSettings.showSolarRing) return;
+
   currentTheme = getCurrentColorTheme();
   GRect bounds = layer_get_bounds(layer);
 

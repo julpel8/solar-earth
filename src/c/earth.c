@@ -1,20 +1,44 @@
 #include "earth.h"
+#include "utils.h"
 #include <math.h>
 
-// Day globes use up to 8 palette colours (indices 0..7); the night palette is
-// stacked into indices 8..15 of the same 4-bit (16-entry) palette, so a pixel
-// is shown "at night" simply by adding 8 to its colour index.
+// The C side owns every displayed colour, so the resource compiler can never
+// change what the watch shows by reordering a PNG palette. Day pixels keep
+// palette indices 0..7 but their RGB values are overwritten below; night
+// pixels are remapped into fixed upper-palette indices 8..11. The PNG palettes
+// are used only to *classify* each pixel (ocean vs land, city vs dark).
 #define N_DAY_COLOURS 8
+#define NIGHT_IDX_OCEAN 8
+#define NIGHT_IDX_LAND 9
+#define NIGHT_IDX_CITY_DIM 10
+#define NIGHT_IDX_CITY_BRIGHT 11
+
+// Single source of truth for every displayed colour (RGB, quantised to
+// Pebble's 64-colour space at runtime by GColorFromHEX). Vivid palette
+// inspired by Joshua Simmons' Blue Pebble (#0055FF ocean, #00AA00 land) for
+// strong contrast on the 64-colour display. Night land mirrors the day-land
+// hue (dark green); cities are warm amber -> bright yellow so they read
+// against the dark globe.
+#define DAY_OCEAN_HEX 0x0055FF
+#define DAY_LAND_HEX 0x00AA00
+#define NIGHT_OCEAN_HEX 0x000055
+#define NIGHT_LAND_HEX 0x005500
+#define NIGHT_CITY_DIM_HEX 0x005500
+#define NIGHT_CITY_BRIGHT_HEX 0xFFFF55
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+#define HALF_PI ((float)(M_PI / 2.0))
+#define TWO_PI ((float)(M_PI * 2.0))
 #define DEG2RAD ((float)(M_PI / 180.0))
 
 static GBitmap *s_day, *s_night, *s_combined;
 static uint8_t *s_day_data, *s_night_data, *s_comb_data;
 static unsigned int s_bpr, s_rows, s_cols;
 static int s_lat0 = 0, s_lon0 = 0;
+static uint8_t s_day_to_night_base[16];
+static uint8_t s_night_to_city[16];
 
 typedef struct {
   bool active;
@@ -58,6 +82,67 @@ static float fast_sqrtf(float x) {
   return x * inv;
 }
 
+static float wrap_pi(float x) {
+  while (x > (float)M_PI) x -= TWO_PI;
+  while (x < -(float)M_PI) x += TWO_PI;
+  return x;
+}
+
+static float fast_sinf(float x) {
+  x = wrap_pi(x);
+  if (x > HALF_PI) {
+    x = (float)M_PI - x;
+  } else if (x < -HALF_PI) {
+    x = -(float)M_PI - x;
+  }
+
+  float x2 = x * x;
+  return x * (1.0f - x2 / 6.0f + (x2 * x2) / 120.0f);
+}
+
+static float fast_cosf(float x) { return fast_sinf(x + HALF_PI); }
+
+static bool is_day_ocean_color(GColor color) {
+  return color.a > 0 && color.b > color.g && color.b > color.r;
+}
+
+static uint8_t city_index_for_night_color(GColor color) {
+  if (color.a == 0) return 0;
+  if (color.r >= 3 && color.g >= 3) return NIGHT_IDX_CITY_BRIGHT;
+  if (color.r >= 3 && color.g >= 2) return NIGHT_IDX_CITY_DIM;
+  return 0;
+}
+
+static void prepare_palette(GColor *day_pal, GColor *night_pal) {
+  day_pal[NIGHT_IDX_OCEAN] = GColorFromHEX(NIGHT_OCEAN_HEX);
+  day_pal[NIGHT_IDX_LAND] = GColorFromHEX(NIGHT_LAND_HEX);
+  day_pal[NIGHT_IDX_CITY_DIM] = GColorFromHEX(NIGHT_CITY_DIM_HEX);
+  day_pal[NIGHT_IDX_CITY_BRIGHT] = GColorFromHEX(NIGHT_CITY_BRIGHT_HEX);
+
+  for (int i = 0; i < 16; i++) {
+    s_day_to_night_base[i] = NIGHT_IDX_OCEAN;
+    s_night_to_city[i] = 0;
+  }
+
+  for (int i = 0; i < N_DAY_COLOURS; i++) {
+    bool ocean = is_day_ocean_color(day_pal[i]);
+    s_day_to_night_base[i] = ocean ? NIGHT_IDX_OCEAN : NIGHT_IDX_LAND;
+    s_night_to_city[i] = city_index_for_night_color(night_pal[i]);
+    // C has the final say on day colours: overwrite whatever the resource
+    // compiler emitted, but leave the disc's transparent background alone.
+    if (day_pal[i].a != 0) {
+      day_pal[i] =
+          ocean ? GColorFromHEX(DAY_OCEAN_HEX) : GColorFromHEX(DAY_LAND_HEX);
+    }
+  }
+}
+
+static uint8_t night_index_for_pixel(uint8_t day_index, uint8_t night_index) {
+  uint8_t city = s_night_to_city[night_index & 0x0F];
+  if (city) return city;
+  return s_day_to_night_base[day_index & 0x0F];
+}
+
 static GBitmap *load_region(uint8_t region) {
   if (region >= EARTH_NUM_REGIONS) region = 0;
   earth_destroy();  // free any previous globe first
@@ -69,12 +154,9 @@ static GBitmap *load_region(uint8_t region) {
   s_lat0 = r->lat;
   s_lon0 = r->lon;
 
-  // Stack the night palette into the upper half of the day palette.
   GColor *day_pal = gbitmap_get_palette(s_day);
   GColor *night_pal = gbitmap_get_palette(s_night);
-  for (int i = 0; i < N_DAY_COLOURS; i++) {
-    day_pal[i + N_DAY_COLOURS] = night_pal[i];
-  }
+  prepare_palette(day_pal, night_pal);
 
   GRect b = gbitmap_get_bounds(s_day);
   s_bpr = gbitmap_get_bytes_per_row(s_day);
@@ -99,18 +181,23 @@ void earth_start_update(time_t utc_now) {
 
   // Subsolar point (where the sun is directly overhead).
   int doy = utc.tm_yday;
-  float decl = 0.40928f * sinf(2.0f * (float)M_PI * (float)(doy - 80) / 365.0f);
+  float decl =
+      0.40928f * fast_sinf(TWO_PI * (float)(doy - 80) / 365.0f);
   float utch = utc.tm_hour + utc.tm_min / 60.0f;
   float sublon = -15.0f * (utch - 12.0f) * DEG2RAD;
-  float Sx = cosf(decl) * cosf(sublon);
-  float Sy = cosf(decl) * sinf(sublon);
-  float Sz = sinf(decl);
+  float Sx = fast_cosf(decl) * fast_cosf(sublon);
+  float Sy = fast_cosf(decl) * fast_sinf(sublon);
+  float Sz = fast_sinf(decl);
 
   // View basis at the globe centre: east, north(up), outward(toward viewer).
   float la = s_lat0 * DEG2RAD, lo = s_lon0 * DEG2RAD;
-  float fwdx = cosf(la) * cosf(lo), fwdy = cosf(la) * sinf(lo), fwdz = sinf(la);
-  float upx = -sinf(la) * cosf(lo), upy = -sinf(la) * sinf(lo), upz = cosf(la);
-  float eax = -sinf(lo), eay = cosf(lo);
+  float fwdx = fast_cosf(la) * fast_cosf(lo);
+  float fwdy = fast_cosf(la) * fast_sinf(lo);
+  float fwdz = fast_sinf(la);
+  float upx = -fast_sinf(la) * fast_cosf(lo);
+  float upy = -fast_sinf(la) * fast_sinf(lo);
+  float upz = fast_cosf(la);
+  float eax = -fast_sinf(lo), eay = fast_cosf(lo);
   // Sun direction expressed in the disc frame (x=east, y=up, z=toward viewer).
   s_update.sun_x = Sx * eax + Sy * eay;
   s_update.sun_y = Sx * upx + Sy * upy + Sz * upz;
@@ -137,7 +224,8 @@ bool earth_update_step(unsigned int max_rows) {
     float fy = (cy - (float)row) * invR;
     unsigned int rb = row * s_bpr;
     for (unsigned int byte = 0; byte < s_bpr; byte++) {
-      uint8_t out = s_day_data[rb + byte];   // default: day pixels
+      uint8_t day_byte = s_day_data[rb + byte];
+      uint8_t out = day_byte;                 // default: day pixels
       uint8_t night_byte = s_night_data[rb + byte];
       for (int sub = 0; sub < 2; sub++) {
         unsigned int col = byte * 2 + sub;
@@ -149,13 +237,9 @@ bool earth_update_step(unsigned int max_rows) {
         float dot = fx * s_update.sun_x + fy * s_update.sun_y +
                     z * s_update.sun_z;
         if (dot <= 0.0f) {                    // night side
-          if (sub == 0) {
-            uint8_t ni = (uint8_t)(((night_byte >> 4) & 0x0F) + N_DAY_COLOURS);
-            out = (uint8_t)((out & 0x0F) | ((ni & 0x0F) << 4));
-          } else {
-            uint8_t ni = (uint8_t)((night_byte & 0x0F) + N_DAY_COLOURS);
-            out = (uint8_t)((out & 0xF0) | (ni & 0x0F));
-          }
+          uint8_t di = pixel4_get(day_byte, sub);
+          uint8_t ni = pixel4_get(night_byte, sub);
+          out = pixel4_set(out, sub, night_index_for_pixel(di, ni));
         }
       }
       s_comb_data[rb + byte] = out;

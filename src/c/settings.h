@@ -3,18 +3,20 @@
 #include <pebble.h>
 #include <sys/syslimits.h>
 
-#define CURRENT_SETTINGS_VERSION 3
+#define CURRENT_SETTINGS_VERSION 5
 #define SETTINGS_VERSION_PERSIST_KEY 1
 #define SETTINGS_PERSIST_KEY 2
 #define SETTINGS_EXTRA_PERSIST_KEY 3
 #define ALT_CITY_LABEL_LEN 20
+#define INFO_LAYOUT_LEN 24
+#define DEFAULT_INFO_LAYOUT "0:0,1:0,2:1,3:2,4:2"
 
 // default settings
 #ifdef PBL_COLOR
 #define DEFAULT_TIME_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorDarkGray
-#define DEFAULT_BG_COLOR GColorWhite
+#define DEFAULT_BG_COLOR GColorBlack
 #define DEFAULT_PIP_COLOR_PRIMARY GColorBlack
 #define DEFAULT_PIP_COLOR_SECONDARY GColorLightGray
 #define DEFAULT_RING_STROKE_COLOR GColorBlack
@@ -29,7 +31,7 @@
 #define DEFAULT_NIGHT_TIME_COLOR GColorFromHEX(0xFFFFFF)
 #define DEFAULT_NIGHT_SUBTEXT_PRIMARY_COLOR GColorFromHEX(0xFFFFFF)
 #define DEFAULT_NIGHT_SUBTEXT_SECONDARY_COLOR GColorFromHEX(0xAAAAFF)
-#define DEFAULT_NIGHT_BG_COLOR GColorFromHEX(0x000055)
+#define DEFAULT_NIGHT_BG_COLOR GColorBlack
 #define DEFAULT_NIGHT_PIP_COLOR_PRIMARY GColorFromHEX(0xFFFFFF)
 #define DEFAULT_NIGHT_PIP_COLOR_SECONDARY GColorFromHEX(0x0055AA)
 #define DEFAULT_NIGHT_RING_STROKE_COLOR GColorBlack
@@ -43,7 +45,7 @@
 #define DEFAULT_TIME_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorBlack
-#define DEFAULT_BG_COLOR GColorWhite
+#define DEFAULT_BG_COLOR GColorBlack
 #define DEFAULT_PIP_COLOR_PRIMARY GColorBlack
 #define DEFAULT_PIP_COLOR_SECONDARY GColorBlack
 #define DEFAULT_RING_STROKE_COLOR GColorBlack
@@ -79,6 +81,11 @@ typedef enum {
 } PipVisibilityType;
 
 typedef enum { TEMP_UNIT_CELSIUS = 0, TEMP_UNIT_FAHRENHEIT = 1 } TempUnitType;
+
+typedef enum {
+  TEXT_OUTLINE_BLACK_WITH_WHITE = 0,
+  TEXT_OUTLINE_WHITE_WITH_BLACK = 1
+} TextOutlineStyle;
 
 // typedef enum {
 //   NO_VIBE = 0,
@@ -156,6 +163,9 @@ typedef struct {
   int16_t localUtcOffset;
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
+  bool showSolarRing;
+  uint8_t textOutlineStyle;
+  char infoLayout[INFO_LAYOUT_LEN];
 } Settings;
 
 typedef struct {
@@ -216,6 +226,9 @@ typedef struct {
   int16_t localUtcOffset;
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
+  bool showSolarRing;
+  uint8_t textOutlineStyle;
+  char infoLayout[INFO_LAYOUT_LEN];
 } StoredSettingsExtra;
 
 typedef char StoredSettings_must_fit_in_persist_data

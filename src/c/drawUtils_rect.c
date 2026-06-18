@@ -56,9 +56,11 @@ GRect snap_to_edges(GRect rect, GRect bounds, int thickness) {
 void draw_center_layer(Layer *layer, GContext *ctx) {
   currentTheme = getCurrentColorTheme();
   GRect bounds = layer_get_bounds(layer);
-  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_context_set_fill_color(ctx, currentTheme.bgColor);
 
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+
+  if (!globalSettings.showSolarRing) return;
 
   int innerPadding = 0;
 
@@ -113,6 +115,8 @@ void draw_center_layer(Layer *layer, GContext *ctx) {
 }
 
 void draw_ring_layer(Layer *layer, GContext *ctx) {
+  if (!globalSettings.showSolarRing) return;
+
   currentTheme = getCurrentColorTheme();
   GRect bounds = layer_get_bounds(layer);
   int thickness = RING_THICKNESS;

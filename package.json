@@ -1,9 +1,15 @@
 {
   "name": "solar-earth-pebble",
-  "author": "Freakified, modified",
-  "version": "1.0",
+  "author": "julpel8, inspired by Freakified (Halcyon) and Joshua Simmons (Blue Pebble)",
+  "description": "A Pebble watchface showing a day/night globe with the time and configurable info lines. Globe day/night shading inspired by Joshua Simmons' Blue Pebble; clock layout, solar ring and widgets inspired by Freakified's Halcyon.",
+  "version": "0.0.1",
+  "license": "MIT",
   "keywords": [
-    "pebble-watchface"
+    "pebble-watchface",
+    "earth",
+    "globe",
+    "solar",
+    "day-night"
   ],
   "private": true,
   "scripts": {
@@ -79,7 +85,10 @@
       "REQUEST_UPDATE",
       "WATCH_IS_24H",
       "SETTING_USE_PRIMARY_WIDGET_FONT",
-      "SETTING_REGION"
+      "SETTING_REGION",
+      "SETTING_SHOW_SOLAR_RING",
+      "SETTING_TEXT_OUTLINE_STYLE",
+      "SETTING_INFO_LAYOUT"
     ],
     "resources": {
       "media": [

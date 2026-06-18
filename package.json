@@ -1,0 +1,180 @@
+{
+  "name": "solar-earth-pebble",
+  "author": "Freakified, modified",
+  "version": "1.0",
+  "keywords": [
+    "pebble-watchface"
+  ],
+  "private": true,
+  "scripts": {
+    "check:i18n": "node scripts/check-languages.js"
+  },
+  "pebble": {
+    "displayName": "Solar Earth",
+    "uuid": "eb77c087-b268-4773-8040-7dc3ec70061b",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "capabilities": [
+      "location",
+      "configurable",
+      "health"
+    ],
+    "watchapp": {
+      "onlyShownOnCommunication": false,
+      "hiddenApp": false,
+      "watchface": true
+    },
+    "messageKeys": [
+      "LOCATION_LAT",
+      "LOCATION_LNG",
+      "LOCATION_GMT_OFFSET",
+      "SETTING_THEME",
+      "SETTING_NIGHT_THEME",
+      "SETTING_TIME_COLOR",
+      "SETTING_SUBTEXT_PRIMARY_COLOR",
+      "SETTING_SUBTEXT_SECONDARY_COLOR",
+      "SETTING_BG_COLOR",
+      "SETTING_PIP_COLOR_PRIMARY",
+      "SETTING_PIP_COLOR_SECONDARY",
+      "SETTING_RING_STROKE_COLOR",
+      "SETTING_RING_NIGHT_COLOR",
+      "SETTING_RING_DAY_COLOR",
+      "SETTING_RING_SUNRISE_COLOR",
+      "SETTING_RING_SUNSET_COLOR",
+      "SETTING_SUN_STROKE_COLOR",
+      "SETTING_SUN_FILL_COLOR",
+      "SETTING_NIGHT_TIME_COLOR",
+      "SETTING_NIGHT_SUBTEXT_PRIMARY_COLOR",
+      "SETTING_NIGHT_SUBTEXT_SECONDARY_COLOR",
+      "SETTING_NIGHT_BG_COLOR",
+      "SETTING_NIGHT_PIP_COLOR_PRIMARY",
+      "SETTING_NIGHT_PIP_COLOR_SECONDARY",
+      "SETTING_NIGHT_RING_STROKE_COLOR",
+      "SETTING_NIGHT_RING_NIGHT_COLOR",
+      "SETTING_NIGHT_RING_DAY_COLOR",
+      "SETTING_NIGHT_RING_SUNRISE_COLOR",
+      "SETTING_NIGHT_RING_SUNSET_COLOR",
+      "SETTING_NIGHT_SUN_STROKE_COLOR",
+      "SETTING_NIGHT_SUN_FILL_COLOR",
+      "SETTING_USE_LARGE_FONTS",
+      "SETTING_USE_NIGHT_THEME",
+      "SETTING_PIP_VISIBILITY",
+      "SETTING_SHOW_LEADING_ZERO",
+      "SETTING_WIDGET_UPPER_SECONDARY",
+      "SETTING_WIDGET_UPPER_PRIMARY",
+      "SETTING_WIDGET_LOWER_PRIMARY",
+      "SETTING_WIDGET_LOWER_SECONDARY",
+      "WEATHER_SUNRISE_MINUTE",
+      "WEATHER_SUNSET_MINUTE",
+      "SETTING_TEMP_UNIT",
+      "SETTING_LANGUAGE",
+      "SETTING_ALT_CITY_LABEL",
+      "ALT_CITY_UTC_OFFSET",
+      "SETTING_ALT_CITY2_LABEL",
+      "ALT_CITY2_UTC_OFFSET",
+      "LOCAL_UTC_OFFSET",
+      "REQUEST_UPDATE",
+      "WATCH_IS_24H",
+      "SETTING_USE_PRIMARY_WIDGET_FONT",
+      "SETTING_REGION"
+    ],
+    "resources": {
+      "media": [
+        {
+          "file": "images/menuicon.png",
+          "menuIcon": true,
+          "name": "MENU_ICON",
+          "type": "bitmap"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLUE_MARBLE_EUROPE",
+          "file": "images/blue_marble_europe.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLACK_MARBLE_EUROPE",
+          "file": "images/black_marble_europe.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLUE_MARBLE_AFRICA",
+          "file": "images/blue_marble_africa.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLACK_MARBLE_AFRICA",
+          "file": "images/black_marble_africa.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLUE_MARBLE_NAMERICA",
+          "file": "images/blue_marble_namerica.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLACK_MARBLE_NAMERICA",
+          "file": "images/black_marble_namerica.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLUE_MARBLE_SAMERICA",
+          "file": "images/blue_marble_samerica.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLACK_MARBLE_SAMERICA",
+          "file": "images/black_marble_samerica.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLUE_MARBLE_ASIA",
+          "file": "images/blue_marble_asia.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLACK_MARBLE_ASIA",
+          "file": "images/black_marble_asia.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLUE_MARBLE_OCEANIA",
+          "file": "images/blue_marble_oceania.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        },
+        {
+          "type": "bitmap",
+          "name": "BLACK_MARBLE_OCEANIA",
+          "file": "images/black_marble_oceania.png",
+          "memoryFormat": "4BitPalette",
+          "spaceOptimization": "memory"
+        }
+      ]
+    }
+  },
+  "dependencies": {}
+}

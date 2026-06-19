@@ -23,6 +23,7 @@ static void populateStoredSettingsExtra(StoredSettingsExtra *storedSettingsExtra
           INFO_LAYOUT_LEN);
   storedSettingsExtra->infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
   storedSettingsExtra->timeFormat = globalSettings.timeFormat;
+  storedSettingsExtra->earthUpdateInterval = globalSettings.earthUpdateInterval;
 }
 
 void Settings_init() { Settings_loadFromStorage(); }
@@ -77,6 +78,7 @@ void Settings_loadFromStorage() {
   globalSettings.tempUnit = TEMP_UNIT_CELSIUS;
   globalSettings.language = 0;
   globalSettings.timeFormat = TIME_FORMAT_SYSTEM;
+  globalSettings.earthUpdateInterval = 5;  // minutes
 
   // widget slot defaults
   // Weather-dependent slots use placeholders until JS sends real data.
@@ -146,6 +148,8 @@ void Settings_loadFromStorage() {
               INFO_LAYOUT_LEN);
       globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
       globalSettings.timeFormat = storedSettingsExtra.timeFormat;
+      globalSettings.earthUpdateInterval =
+          storedSettingsExtra.earthUpdateInterval;
     }
   }
 
@@ -226,6 +230,19 @@ bool settings_is_24h(void) {
 
 bool settings_show_am_pm(void) {
   return (TimeFormatType)globalSettings.timeFormat == TIME_FORMAT_12H_AMPM;
+}
+
+uint16_t settings_earth_update_seconds(void) {
+  switch (globalSettings.earthUpdateInterval) {
+    case 1:
+    case 5:
+    case 15:
+    case 30:
+    case 60:
+      return (uint16_t)globalSettings.earthUpdateInterval * 60;
+    default:
+      return 5 * 60;
+  }
 }
 
 ColorTheme getCurrentColorTheme() {

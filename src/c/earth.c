@@ -1,4 +1,5 @@
 #include "earth.h"
+#include "settings.h"
 #include <math.h>
 
 // The C side owns every displayed colour, so the resource compiler can never
@@ -279,7 +280,8 @@ static void earth_destroy(void) {
 // day/night shading timer. Builds on the globe model above.
 // ===========================================================================
 
-#define EARTH_UPDATE_INTERVAL_SECONDS (5 * 60)
+// The day/night refresh cadence is user-configurable; see
+// settings_earth_update_seconds(). Slicing the work keeps the UI responsive.
 #define EARTH_UPDATE_SLICE_DELAY_MS 15
 #define EARTH_UPDATE_ROWS_PER_SLICE 3
 
@@ -487,11 +489,18 @@ bool earth_render_set_region(uint8_t region) {
 void earth_render_maybe_update(time_t now) {
   if (!s_earth_bitmap || earth_update_is_active()) return;
   if (s_last_earth_update_time == 0 ||
-      now - s_last_earth_update_time >= EARTH_UPDATE_INTERVAL_SECONDS) {
+      now - s_last_earth_update_time >= settings_earth_update_seconds()) {
     start_earth_update_async(now, false);
   }
 }
 
 void earth_render_force_update(time_t now) {
   start_earth_update_async(now, true);
+}
+
+// TEMP DEBUG: see earth.h.
+int32_t earth_render_seconds_until_update(time_t now) {
+  if (s_last_earth_update_time == 0) return 0;
+  return (int32_t)(s_last_earth_update_time + settings_earth_update_seconds() -
+                   now);
 }

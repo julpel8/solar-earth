@@ -98,6 +98,9 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   Tuple *timeFormat_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_TIME_FORMAT);
 
+  Tuple *earthUpdateInterval_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_EARTH_UPDATE_INTERVAL);
+
   Tuple *pipVisibility_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_PIP_VISIBILITY);
 
@@ -288,6 +291,22 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
     uint8_t tf = (uint8_t)timeFormat_tuple->value->int8;
     globalSettings.timeFormat =
         tf <= TIME_FORMAT_12H_AMPM ? tf : TIME_FORMAT_SYSTEM;
+  }
+
+  if (earthUpdateInterval_tuple != NULL) {
+    uint8_t mins = (uint8_t)earthUpdateInterval_tuple->value->int8;
+    switch (mins) {
+      case 1:
+      case 5:
+      case 15:
+      case 30:
+      case 60:
+        globalSettings.earthUpdateInterval = mins;
+        break;
+      default:
+        globalSettings.earthUpdateInterval = 5;
+        break;
+    }
   }
 
   if (widgetUpperSecondary_tuple != NULL) {

@@ -13,6 +13,13 @@
 // Long enough for "12:30 PM" plus the null terminator.
 #define TIME_STR_LEN 12
 
+// === TEMP DEBUG: globe refresh countdown ==================================
+// On-screen "next globe refresh in Ns / every Mm" overlay, updated every
+// second by its own timer. Set to 0 (or delete this block plus the three
+// other "TEMP DEBUG" marked blocks below) to remove.
+#define DEBUG_REFRESH_COUNTDOWN 0
+// =========================================================================
+
 // Heartbeat timer: the watch requests data from the phone on this interval
 #define UPDATE_REQUEST_INTERVAL_MS (30 * 60 * 1000) // 30 minutes
 #define UPDATE_REQUEST_INITIAL_DELAY_MS (3 * 1000)   // 3 seconds after startup
@@ -30,6 +37,28 @@ static char timeText[TIME_STR_LEN];
 
 // Heartbeat timer for requesting data updates from the phone
 static AppTimer *s_update_request_timer = NULL;
+
+// === TEMP DEBUG: globe refresh countdown ==================================
+#if DEBUG_REFRESH_COUNTDOWN
+static TextLayer *s_debug_countdown_layer = NULL;
+static char s_debug_countdown_text[28];
+static AppTimer *s_debug_countdown_timer = NULL;
+
+static void debug_countdown_update(void *data) {
+  time_t now = time(NULL);
+  int32_t secs = earth_render_seconds_until_update(now);
+  if (secs < 0) secs = 0;
+  int mins = settings_earth_update_seconds() / 60;
+  snprintf(s_debug_countdown_text, sizeof(s_debug_countdown_text),
+           "globe %lds / %dm", (long)secs, mins);
+  if (s_debug_countdown_layer) {
+    text_layer_set_text(s_debug_countdown_layer, s_debug_countdown_text);
+  }
+  s_debug_countdown_timer =
+      app_timer_register(1000, debug_countdown_update, NULL);
+}
+#endif
+// =========================================================================
 
 static GRect get_center_frame(GRect bounds) {
   // The globe always fills the screen; no edge ring inset.
@@ -177,9 +206,36 @@ static void main_window_load(Window *window) {
 
   // make sure the time is displayed from the start
   update_clock();
+
+  // === TEMP DEBUG: globe refresh countdown ================================
+#if DEBUG_REFRESH_COUNTDOWN
+  s_debug_countdown_layer =
+      text_layer_create(GRect(0, 0, bounds.size.w, 18));
+  text_layer_set_background_color(s_debug_countdown_layer, GColorBlack);
+  text_layer_set_text_color(s_debug_countdown_layer, GColorWhite);
+  text_layer_set_font(s_debug_countdown_layer,
+                      fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_text_alignment(s_debug_countdown_layer, GTextAlignmentCenter);
+  layer_add_child(windowLayer, text_layer_get_layer(s_debug_countdown_layer));
+  debug_countdown_update(NULL);
+#endif
+  // =======================================================================
 }
 
 static void main_window_unload(Window *window) {
+  // === TEMP DEBUG: globe refresh countdown ===============================
+#if DEBUG_REFRESH_COUNTDOWN
+  if (s_debug_countdown_timer) {
+    app_timer_cancel(s_debug_countdown_timer);
+    s_debug_countdown_timer = NULL;
+  }
+  if (s_debug_countdown_layer) {
+    text_layer_destroy(s_debug_countdown_layer);
+    s_debug_countdown_layer = NULL;
+  }
+#endif
+  // =======================================================================
+
   // destroy everything
   layer_destroy(infoLayer);
   earth_render_deinit();

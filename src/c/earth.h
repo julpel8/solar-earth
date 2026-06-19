@@ -39,3 +39,8 @@ void earth_render_maybe_update(time_t now);
 
 // Force an immediate (async) day/night shading recompute.
 void earth_render_force_update(time_t now);
+
+// TEMP DEBUG: seconds remaining until the next scheduled day/night recompute
+// (relative to `now`). Negative/zero means a refresh is due on the next tick.
+// Remove together with the debug overlay in main.c.
+int32_t earth_render_seconds_until_update(time_t now);

@@ -3,7 +3,7 @@
 #include <pebble.h>
 #include <sys/syslimits.h>
 
-#define CURRENT_SETTINGS_VERSION 9
+#define CURRENT_SETTINGS_VERSION 10
 #define SETTINGS_VERSION_PERSIST_KEY 1
 #define SETTINGS_PERSIST_KEY 2
 #define SETTINGS_EXTRA_PERSIST_KEY 3
@@ -179,6 +179,7 @@ typedef struct {
   uint8_t region;  // globe centre region (EarthRegion)
   char infoLayout[INFO_LAYOUT_LEN];
   uint8_t timeFormat;  // TimeFormatType
+  uint8_t earthUpdateInterval;  // globe day/night refresh interval, in minutes
 } Settings;
 
 typedef struct {
@@ -240,7 +241,9 @@ typedef struct {
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
   char infoLayout[INFO_LAYOUT_LEN];
-  uint8_t timeFormat;  // TimeFormatType; appended last so old blobs keep default
+  uint8_t timeFormat;  // TimeFormatType
+  uint8_t earthUpdateInterval;  // globe refresh interval (min); appended last so
+                                // old blobs keep default
 } StoredSettingsExtra;
 
 typedef char StoredSettings_must_fit_in_persist_data
@@ -258,6 +261,10 @@ ColorTheme getCurrentColorTheme();
 // explicit "12-hour with AM/PM" option (controls the main time line).
 bool settings_is_24h(void);
 bool settings_show_am_pm(void);
+
+// Globe day/night refresh interval in seconds, derived from the configured
+// earthUpdateInterval (minutes). Falls back to 5 minutes for unknown values.
+uint16_t settings_earth_update_seconds(void);
 
 void Settings_init();
 void Settings_deinit();

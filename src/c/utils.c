@@ -17,12 +17,3 @@ struct tm *getCurrentTime() {
 
   return &timeInfo;
 }
-
-uint8_t pixel4_get(uint8_t byte, int sub) {
-  return sub == 0 ? (byte >> 4) & 0x0F : byte & 0x0F;
-}
-
-uint8_t pixel4_set(uint8_t byte, int sub, uint8_t index) {
-  if (sub == 0) return (uint8_t)((byte & 0x0F) | ((index & 0x0F) << 4));
-  return (uint8_t)((byte & 0xF0) | (index & 0x0F));
-}

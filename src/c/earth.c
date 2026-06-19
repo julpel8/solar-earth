@@ -1,5 +1,4 @@
 #include "earth.h"
-#include "utils.h"
 #include <math.h>
 
 // The C side owns every displayed colour, so the resource compiler can never
@@ -102,6 +101,17 @@ static float fast_sinf(float x) {
 
 static float fast_cosf(float x) { return fast_sinf(x + HALF_PI); }
 
+// 4-bit (16-entry palette) pixel packing: two pixels per byte, sub 0 = high
+// nibble, sub 1 = low nibble.
+static uint8_t pixel4_get(uint8_t byte, int sub) {
+  return sub == 0 ? (byte >> 4) & 0x0F : byte & 0x0F;
+}
+
+static uint8_t pixel4_set(uint8_t byte, int sub, uint8_t index) {
+  if (sub == 0) return (uint8_t)((byte & 0x0F) | ((index & 0x0F) << 4));
+  return (uint8_t)((byte & 0xF0) | (index & 0x0F));
+}
+
 static bool is_day_ocean_color(GColor color) {
   return color.a > 0 && color.b > color.g && color.b > color.r;
 }
@@ -143,6 +153,8 @@ static uint8_t night_index_for_pixel(uint8_t day_index, uint8_t night_index) {
   return s_day_to_night_base[day_index & 0x0F];
 }
 
+static void earth_destroy(void);
+
 static GBitmap *load_region(uint8_t region) {
   if (region >= EARTH_NUM_REGIONS) region = 0;
   earth_destroy();  // free any previous globe first
@@ -172,10 +184,10 @@ static GBitmap *load_region(uint8_t region) {
   return s_combined;
 }
 
-GBitmap *earth_init(uint8_t region) { return load_region(region); }
-GBitmap *earth_set_region(uint8_t region) { return load_region(region); }
+static GBitmap *earth_init(uint8_t region) { return load_region(region); }
+static GBitmap *earth_set_region(uint8_t region) { return load_region(region); }
 
-void earth_start_update(time_t utc_now) {
+static void earth_start_update(time_t utc_now) {
   if (!s_combined) return;
   struct tm utc = *gmtime(&utc_now);
 
@@ -206,9 +218,9 @@ void earth_start_update(time_t utc_now) {
   s_update.active = true;
 }
 
-bool earth_update_is_active(void) { return s_update.active; }
+static bool earth_update_is_active(void) { return s_update.active; }
 
-bool earth_update_step(unsigned int max_rows) {
+static bool earth_update_step(unsigned int max_rows) {
   if (!s_combined || !s_update.active) return true;
   if (max_rows == 0) max_rows = 1;
 
@@ -255,15 +267,231 @@ bool earth_update_step(unsigned int max_rows) {
   return false;
 }
 
-void earth_update(time_t utc_now) {
-  earth_start_update(utc_now);
-  while (!earth_update_step(s_rows)) {
-  }
-}
-
-void earth_destroy(void) {
+static void earth_destroy(void) {
   s_update.active = false;
   if (s_combined) { gbitmap_destroy(s_combined); s_combined = NULL; }
   if (s_day) { gbitmap_destroy(s_day); s_day = NULL; }
   if (s_night) { gbitmap_destroy(s_night); s_night = NULL; }
+}
+
+// ===========================================================================
+// Globe presentation: BitmapLayer, scaled display bitmap and the incremental
+// day/night shading timer. Builds on the globe model above.
+// ===========================================================================
+
+#define EARTH_UPDATE_INTERVAL_SECONDS (5 * 60)
+#define EARTH_UPDATE_SLICE_DELAY_MS 15
+#define EARTH_UPDATE_ROWS_PER_SLICE 3
+
+// Globe display size: scaled (preserving aspect ratio) to span the centre frame
+// width minus a small side margin so the globe never bleeds to the very edge.
+#define EARTH_SIDE_MARGIN 3
+
+static BitmapLayer *s_earth_layer;   // globe disc, between centre bg and the time
+static GBitmap *s_earth_bitmap;      // source globe (the combined model bitmap)
+static GBitmap *s_earth_display_bitmap;  // scaled copy (owned here)
+static GSize s_earth_display_size = {0, 0};
+static bool s_earth_display_dirty = true;
+static uint8_t s_loaded_earth_region = 0xFF;
+static GRect s_center_frame;
+
+static AppTimer *s_earth_update_timer = NULL;
+static time_t s_last_earth_update_time = 0;
+
+static GSize compute_earth_display_size(GRect centerFrame) {
+  GSize src = gbitmap_get_bounds(s_earth_bitmap).size;
+  if (src.w <= 0) return src;
+  int16_t targetW = centerFrame.size.w - 2 * EARTH_SIDE_MARGIN;
+  if (targetW < 1) targetW = centerFrame.size.w;
+  GSize displaySize = {targetW,
+                       (int16_t)((int32_t)targetW * src.h / src.w)};
+  return displaySize;
+}
+
+// Centre the globe bitmap inside the given centre frame.
+static void position_earth_layer(GRect centerFrame) {
+  if (!s_earth_layer || !s_earth_bitmap) return;
+  GSize displaySize = compute_earth_display_size(centerFrame);
+
+  int ex = centerFrame.origin.x + (centerFrame.size.w - displaySize.w) / 2;
+  int ey = centerFrame.origin.y + (centerFrame.size.h - displaySize.h) / 2;
+  layer_set_frame(bitmap_layer_get_layer(s_earth_layer),
+                  GRect(ex, ey, displaySize.w, displaySize.h));
+}
+
+static uint8_t get_4bit_pixel(const uint8_t *data, uint16_t bytesPerRow,
+                              int x, int y) {
+  return pixel4_get(data[y * bytesPerRow + x / 2], x % 2);
+}
+
+static void set_4bit_pixel(uint8_t *data, uint16_t bytesPerRow, int x, int y,
+                           uint8_t value) {
+  uint8_t *packed = &data[y * bytesPerRow + x / 2];
+  *packed = pixel4_set(*packed, x % 2, value);
+}
+
+static void destroy_earth_display_bitmap(void) {
+  if (s_earth_display_bitmap) {
+    gbitmap_destroy(s_earth_display_bitmap);
+    s_earth_display_bitmap = NULL;
+  }
+  s_earth_display_size = GSize(0, 0);
+  s_earth_display_dirty = true;
+}
+
+static GBitmap *get_earth_display_bitmap(GSize displaySize) {
+  if (!s_earth_bitmap) return NULL;
+
+  GRect sourceBounds = gbitmap_get_bounds(s_earth_bitmap);
+  if (displaySize.w == sourceBounds.size.w &&
+      displaySize.h == sourceBounds.size.h) {
+    destroy_earth_display_bitmap();  // scaled copy no longer needed
+    return s_earth_bitmap;
+  }
+
+  if (gbitmap_get_format(s_earth_bitmap) != GBitmapFormat4BitPalette) {
+    return s_earth_bitmap;
+  }
+
+  bool sizeChanged = !s_earth_display_bitmap ||
+                     s_earth_display_size.w != displaySize.w ||
+                     s_earth_display_size.h != displaySize.h;
+  if (sizeChanged) {
+    destroy_earth_display_bitmap();
+    s_earth_display_bitmap =
+        gbitmap_create_blank(displaySize, gbitmap_get_format(s_earth_bitmap));
+    if (!s_earth_display_bitmap) return s_earth_bitmap;
+
+    GColor *palette = gbitmap_get_palette(s_earth_bitmap);
+    if (palette) gbitmap_set_palette(s_earth_display_bitmap, palette, false);
+    s_earth_display_size = displaySize;
+    s_earth_display_dirty = true;
+  }
+
+  if (s_earth_display_dirty && s_earth_display_bitmap) {
+    const uint8_t *sourceData = gbitmap_get_data(s_earth_bitmap);
+    uint8_t *displayData = gbitmap_get_data(s_earth_display_bitmap);
+    uint16_t sourceBytesPerRow = gbitmap_get_bytes_per_row(s_earth_bitmap);
+    uint16_t displayBytesPerRow =
+        gbitmap_get_bytes_per_row(s_earth_display_bitmap);
+
+    memset(displayData, 0, displayBytesPerRow * displaySize.h);
+    for (int y = 0; y < displaySize.h; y++) {
+      int sourceY = (int32_t)y * sourceBounds.size.h / displaySize.h;
+      for (int x = 0; x < displaySize.w; x++) {
+        int sourceX = (int32_t)x * sourceBounds.size.w / displaySize.w;
+        uint8_t pixel =
+            get_4bit_pixel(sourceData, sourceBytesPerRow, sourceX, sourceY);
+        set_4bit_pixel(displayData, displayBytesPerRow, x, y, pixel);
+      }
+    }
+    s_earth_display_dirty = false;
+  }
+
+  return s_earth_display_bitmap ? s_earth_display_bitmap : s_earth_bitmap;
+}
+
+static void refresh_earth_layer(GRect centerFrame) {
+  if (!s_earth_layer || !s_earth_bitmap) return;
+  GSize displaySize = compute_earth_display_size(centerFrame);
+
+  GBitmap *displayBitmap = get_earth_display_bitmap(displaySize);
+  bitmap_layer_set_bitmap(s_earth_layer, displayBitmap);
+  position_earth_layer(centerFrame);
+  layer_mark_dirty(bitmap_layer_get_layer(s_earth_layer));
+}
+
+static void earth_update_timer_callback(void *data);
+
+static void cancel_earth_update_timer(void) {
+  if (s_earth_update_timer) {
+    app_timer_cancel(s_earth_update_timer);
+    s_earth_update_timer = NULL;
+  }
+}
+
+static void schedule_earth_update_slice(uint32_t delay_ms) {
+  s_earth_update_timer =
+      app_timer_register(delay_ms, earth_update_timer_callback, NULL);
+}
+
+static void start_earth_update_async(time_t now, bool force) {
+  if (!s_earth_bitmap || !s_earth_layer) return;
+  if (earth_update_is_active() && !force) return;
+
+  cancel_earth_update_timer();
+  earth_start_update(now);
+  schedule_earth_update_slice(1);
+}
+
+static void earth_update_timer_callback(void *data) {
+  s_earth_update_timer = NULL;
+  bool done = earth_update_step(EARTH_UPDATE_ROWS_PER_SLICE);
+  if (done) {
+    s_last_earth_update_time = time(NULL);
+    s_earth_display_dirty = true;
+    refresh_earth_layer(s_center_frame);
+    APP_LOG(APP_LOG_LEVEL_INFO, "Earth shading update complete");
+  } else {
+    schedule_earth_update_slice(EARTH_UPDATE_SLICE_DELAY_MS);
+  }
+}
+
+void earth_render_init(Layer *parent, GRect frame, GColor bg, uint8_t region) {
+  s_earth_bitmap = earth_init(region);
+  s_loaded_earth_region = region;
+  s_center_frame = frame;
+
+  s_earth_layer = bitmap_layer_create(frame);
+  bitmap_layer_set_compositing_mode(s_earth_layer, GCompOpSet);
+  bitmap_layer_set_background_color(s_earth_layer, bg);
+  layer_add_child(parent, bitmap_layer_get_layer(s_earth_layer));
+
+  refresh_earth_layer(frame);
+}
+
+void earth_render_deinit(void) {
+  cancel_earth_update_timer();
+  if (s_earth_layer) {
+    bitmap_layer_destroy(s_earth_layer);
+    s_earth_layer = NULL;
+  }
+  destroy_earth_display_bitmap();
+  earth_destroy();
+  s_earth_bitmap = NULL;
+}
+
+void earth_render_reposition(GRect frame) {
+  s_center_frame = frame;
+  refresh_earth_layer(frame);
+}
+
+void earth_render_set_bg(GColor bg) {
+  if (s_earth_layer) {
+    bitmap_layer_set_background_color(s_earth_layer, bg);
+  }
+}
+
+bool earth_render_set_region(uint8_t region) {
+  bool regionChanged = !s_earth_bitmap || s_loaded_earth_region != region;
+  if (!regionChanged) return false;
+
+  cancel_earth_update_timer();
+  destroy_earth_display_bitmap();
+  s_earth_bitmap = earth_set_region(region);
+  s_loaded_earth_region = region;
+  s_last_earth_update_time = 0;
+  return true;
+}
+
+void earth_render_maybe_update(time_t now) {
+  if (!s_earth_bitmap || earth_update_is_active()) return;
+  if (s_last_earth_update_time == 0 ||
+      now - s_last_earth_update_time >= EARTH_UPDATE_INTERVAL_SECONDS) {
+    start_earth_update_async(now, false);
+  }
+}
+
+void earth_render_force_update(time_t now) {
+  start_earth_update_async(now, true);
 }

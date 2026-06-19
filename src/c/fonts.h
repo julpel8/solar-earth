@@ -9,3 +9,8 @@ GFont time_font_for_size(uint8_t size, int *height, int *offset);
 
 // Same as time_font_for_size, but for the info/widget font family.
 GFont info_font_for_size(uint8_t size, int *height, int *offset);
+
+// Small font (with letters) used for the AM/PM suffix drawn next to the main
+// time. The LECO "numbers" time fonts have no A/M/P glyphs, so the suffix is
+// rendered separately in this proportionally smaller font.
+GFont ampm_font(int *height, int *offset);

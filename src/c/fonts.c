@@ -35,3 +35,9 @@ GFont info_font_for_size(uint8_t size, int *height, int *offset) {
       return fonts_get_system_font(FONT_INFO_SIZE_M);
   }
 }
+
+GFont ampm_font(int *height, int *offset) {
+  *height = FONT_INFO_SIZE_S_HEIGHT;
+  *offset = FONT_INFO_SIZE_S_OFFSET;
+  return fonts_get_system_font(FONT_INFO_SIZE_S);
+}

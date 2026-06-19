@@ -156,9 +156,8 @@ static int slot_group_height(SlotDescriptor *slots, int count, uint8_t group) {
 
 // Draw text with a fixed halo so it stays readable over the globe.
 // Always white text with a black outline.
-static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
-                                GRect frame, GColor color) {
-  (void)color;
+static void draw_text_halo_aligned(GContext *ctx, const char *text, GFont font,
+                                   GRect frame, GTextAlignment align) {
   GColor halo = GColorBlack;
   GColor text_color = GColorWhite;
   static const int dx[] = {-1, 1, 0, 0, -1, -1, 1, 1};
@@ -168,12 +167,65 @@ static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
     graphics_draw_text(ctx, text, font,
                        GRect(frame.origin.x + dx[k], frame.origin.y + dy[k],
                              frame.size.w, frame.size.h),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter,
-                       NULL);
+                       GTextOverflowModeTrailingEllipsis, align, NULL);
   }
   graphics_context_set_text_color(ctx, text_color);
   graphics_draw_text(ctx, text, font, frame, GTextOverflowModeTrailingEllipsis,
-                     GTextAlignmentCenter, NULL);
+                     align, NULL);
+}
+
+static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
+                                GRect frame, GColor color) {
+  (void)color;
+  draw_text_halo_aligned(ctx, text, font, frame, GTextAlignmentCenter);
+}
+
+// Draw the main time with a separate, smaller AM/PM suffix. The LECO "numbers"
+// time fonts have no letters, so "12:30 PM" rendered as one string overflows
+// into an ellipsis. We split at the last space, draw the digits in the time
+// font and the suffix in a small font, baseline-aligned and centred as a group.
+static void draw_time_with_ampm(GContext *ctx, SlotDescriptor *s, int y,
+                                int width) {
+  const char *space = strrchr(s->text, ' ');
+  if (!space) {
+    draw_text_with_halo(ctx, s->text, s->font,
+                        GRect(0, y - s->offset, width, s->height), s->color);
+    return;
+  }
+
+  char num_part[12] = {0};
+  int num_len = (int)(space - s->text);
+  if (num_len >= (int)sizeof(num_part)) num_len = (int)sizeof(num_part) - 1;
+  memcpy(num_part, s->text, num_len);
+  const char *ampm = space + 1;
+
+  int amh = 0, amo = 0;
+  GFont am_font = ampm_font(&amh, &amo);
+
+  GRect measure = GRect(0, 0, width, s->height + amh + 40);
+  GSize num_size = graphics_text_layout_get_content_size(
+      num_part, s->font, measure, GTextOverflowModeWordWrap,
+      GTextAlignmentLeft);
+  GSize am_size = graphics_text_layout_get_content_size(
+      ampm, am_font, measure, GTextOverflowModeWordWrap, GTextAlignmentLeft);
+
+  const int gap = 3;
+  int total_w = num_size.w + gap + am_size.w;
+  int start_x = (width - total_w) / 2;
+  if (start_x < 0) start_x = 0;
+
+  // Digits: same vertical position as a normal time line.
+  draw_text_halo_aligned(ctx, num_part, s->font,
+                         GRect(start_x, y - s->offset, num_size.w + 4,
+                               s->height),
+                         GTextAlignmentLeft);
+
+  // Suffix: align its baseline to the digits' baseline (y + s->height).
+  int am_x = start_x + num_size.w + gap;
+  int am_y = y + s->height - amh - amo;
+  draw_text_halo_aligned(ctx, ampm, am_font,
+                         GRect(am_x, am_y, am_size.w + 4, amh + amo + 4),
+                         GTextAlignmentLeft);
 }
 
 static void draw_slot_group(GContext *ctx, SlotDescriptor *slots, int count,
@@ -181,8 +233,13 @@ static void draw_slot_group(GContext *ctx, SlotDescriptor *slots, int count,
   for (int i = 0; i < count; i++) {
     SlotDescriptor *s = &slots[i];
     if (s->group != group) continue;
-    draw_text_with_halo(ctx, s->text, s->font,
-                        GRect(0, y - s->offset, width, s->height), s->color);
+    if (s->text == s_time_text && settings_show_am_pm() &&
+        strchr(s->text, ' ') != NULL) {
+      draw_time_with_ampm(ctx, s, y, width);
+    } else {
+      draw_text_with_halo(ctx, s->text, s->font,
+                          GRect(0, y - s->offset, width, s->height), s->color);
+    }
     y += s->height + LINE_PADDING;
   }
 }
@@ -281,8 +338,10 @@ void info_layout_update_proc(Layer *layer, GContext *ctx) {
   int center_height = slot_group_height(slots, num_slots, INFO_GROUP_CENTER);
   int bottom_height = slot_group_height(slots, num_slots, INFO_GROUP_BOTTOM);
 
-  int top_y = 2;
-  int bottom_y = bounds.size.h - bottom_height - 2;
+  // Keep a small margin from the top and bottom screen edges.
+  const int EDGE_MARGIN = 3;
+  int top_y = EDGE_MARGIN;
+  int bottom_y = bounds.size.h - bottom_height - EDGE_MARGIN;
   int center_top = top_y + top_height + (top_height > 0 ? LINE_PADDING : 0);
   int center_bottom = bottom_y - (bottom_height > 0 ? LINE_PADDING : 0);
   if (bottom_y < center_top) bottom_y = center_top;

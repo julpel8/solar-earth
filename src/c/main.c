@@ -39,7 +39,6 @@ static Window *mainWindow;
 static Layer *windowLayer;
 static Layer *shiftingLayer;
 static Layer *centerLayer;
-static Layer *ringLayer;
 static Layer *infoLayer;
 static BitmapLayer *earthLayer;   // globe disc, between centre bg and the time
 static GBitmap *earthBitmap;
@@ -47,22 +46,19 @@ static GBitmap *earthDisplayBitmap;
 static GSize s_earth_display_size = {0, 0};
 static bool s_earth_display_dirty = true;
 static uint8_t s_loaded_earth_region = 0xFF;
-static bool s_loaded_show_solar_ring = true;
 static bool s_quick_view_visible = false;
 
 static GRect get_center_frame(GRect bounds) {
-  int inset = globalSettings.showSolarRing ? EDGE_THICKNESS : 0;
-  return GRect(bounds.origin.x + inset, bounds.origin.y + inset,
-               bounds.size.w - inset * 2, bounds.size.h - inset * 2);
+  // The globe always fills the screen; no edge ring inset.
+  return bounds;
 }
 
-// Globe display size: native bitmap size when the ring is shown, else scaled
-// (preserving aspect ratio) to span the centre frame width minus a small side
-// margin so the globe never bleeds to the very edge.
+// Globe display size: scaled (preserving aspect ratio) to span the centre frame
+// width minus a small side margin so the globe never bleeds to the very edge.
 #define EARTH_SIDE_MARGIN 3
 static GSize compute_earth_display_size(GRect centerFrame) {
   GSize src = gbitmap_get_bounds(earthBitmap).size;
-  if (globalSettings.showSolarRing || src.w <= 0) return src;
+  if (src.w <= 0) return src;
   int16_t targetW = centerFrame.size.w - 2 * EARTH_SIDE_MARGIN;
   if (targetW < 1) targetW = centerFrame.size.w;
   GSize displaySize = {targetW,
@@ -105,9 +101,8 @@ static GBitmap *get_earth_display_bitmap(GSize displaySize) {
   if (!earthBitmap) return NULL;
 
   GRect sourceBounds = gbitmap_get_bounds(earthBitmap);
-  if (globalSettings.showSolarRing ||
-      (displaySize.w == sourceBounds.size.w &&
-       displaySize.h == sourceBounds.size.h)) {
+  if (displaySize.w == sourceBounds.size.w &&
+      displaySize.h == sourceBounds.size.h) {
     destroy_earth_display_bitmap();  // scaled copy no longer needed
     return earthBitmap;
   }
@@ -186,7 +181,44 @@ typedef struct {
 typedef struct {
   uint8_t id;
   uint8_t group;
+  uint8_t size;  // INFO_SIZE_S / _M / _L
 } InfoLayoutItem;
+
+// Resolve a per-line size (INFO_SIZE_*) to the time font and its metrics.
+static GFont time_font_for_size(uint8_t size, int *height, int *offset) {
+  switch (size) {
+    case INFO_SIZE_S:
+      *height = FONT_TIME_SIZE_S_HEIGHT;
+      *offset = FONT_TIME_SIZE_S_OFFSET;
+      return fonts_get_system_font(FONT_TIME_SIZE_S);
+    case INFO_SIZE_L:
+      *height = FONT_TIME_SIZE_L_HEIGHT;
+      *offset = FONT_TIME_SIZE_L_OFFSET;
+      return fonts_get_system_font(FONT_TIME_SIZE_L);
+    default:
+      *height = FONT_TIME_SIZE_M_HEIGHT;
+      *offset = FONT_TIME_SIZE_M_OFFSET;
+      return fonts_get_system_font(FONT_TIME_SIZE_M);
+  }
+}
+
+// Resolve a per-line size (INFO_SIZE_*) to the info/widget font and its metrics.
+static GFont info_font_for_size(uint8_t size, int *height, int *offset) {
+  switch (size) {
+    case INFO_SIZE_S:
+      *height = FONT_INFO_SIZE_S_HEIGHT;
+      *offset = FONT_INFO_SIZE_S_OFFSET;
+      return fonts_get_system_font(FONT_INFO_SIZE_S);
+    case INFO_SIZE_L:
+      *height = FONT_INFO_SIZE_L_HEIGHT;
+      *offset = FONT_INFO_SIZE_L_OFFSET;
+      return fonts_get_system_font(FONT_INFO_SIZE_L);
+    default:
+      *height = FONT_INFO_SIZE_M_HEIGHT;
+      *offset = FONT_INFO_SIZE_M_OFFSET;
+      return fonts_get_system_font(FONT_INFO_SIZE_M);
+  }
+}
 
 // Buffer storage for each of the 4 widget slots. Populated by
 // update_widget_text() on the minute tick / settings change, then read by
@@ -245,10 +277,20 @@ static bool parse_info_layout(const char *layout, InfoLayoutItem *items,
     seen[id] = true;
     if (id == INFO_SLOT_TIME) has_time = true;
 
+    p += 3;
+
+    // Optional ":size" third field. Older layouts ("id:group") omit it; default
+    // those lines to the medium size.
+    uint8_t size = INFO_SIZE_DEFAULT;
+    if (p[0] == ':' && p[1] >= '0' && p[1] <= '2') {
+      size = (uint8_t)(p[1] - '0');
+      p += 2;
+    }
+
     items[n].id = id;
     items[n].group = group;
+    items[n].size = size;
     n++;
-    p += 3;
 
     if (*p == ',') {
       p++;
@@ -370,7 +412,6 @@ static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
 
 static void draw_center_text(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  bool useLargeFont = globalSettings.useLargeFonts;
 
   bool useNightColors = false;
   if (globalSettings.useNightTheme) {
@@ -379,25 +420,8 @@ static void draw_center_text(Layer *layer, GContext *ctx) {
     useNightColors = isNightTime(currentMinutes);
   }
 
-  // ---- Font selection ----
-  GFont time_font = fonts_get_system_font(FONT_TIME);
-  int time_height = FONT_TIME_HEIGHT;
-  int time_offset = FONT_TIME_OFFSET;
-
-  GFont primary_font = fonts_get_system_font(
-      useLargeFont ? FONT_WIDGET_PRIMARY_LARGE : FONT_WIDGET_PRIMARY);
-  int primary_height = useLargeFont ? FONT_WIDGET_PRIMARY_LARGE_HEIGHT
-                                    : FONT_WIDGET_PRIMARY_HEIGHT;
-  int primary_offset = useLargeFont ? FONT_WIDGET_PRIMARY_LARGE_OFFSET
-                                    : FONT_WIDGET_PRIMARY_OFFSET;
-
-  GFont secondary_font = fonts_get_system_font(
-      useLargeFont ? FONT_WIDGET_SECONDARY_LARGE : FONT_WIDGET_SECONDARY);
-  int secondary_height = useLargeFont ? FONT_WIDGET_SECONDARY_LARGE_HEIGHT
-                                      : FONT_WIDGET_SECONDARY_HEIGHT;
-  int secondary_offset = useLargeFont ? FONT_WIDGET_SECONDARY_LARGE_OFFSET
-                                      : FONT_WIDGET_SECONDARY_OFFSET;
-
+  // Fonts are chosen per line from each entry's size (see info_font_for_size /
+  // time_font_for_size below); only the colours are decided up front.
   // ---- Color selection ----
   GColor timeColor =
       useNightColors ? globalSettings.nightTimeColor : globalSettings.timeColor;
@@ -431,54 +455,46 @@ static void draw_center_text(Layer *layer, GContext *ctx) {
 
   for (int i = 0; i < layout_count; i++) {
     uint8_t group = layout_items[i].group;
+    uint8_t size = layout_items[i].size;
+    int fh = 0, fo = 0;
+    GFont font;
     switch (layout_items[i].id) {
       case INFO_SLOT_UPPER_SECONDARY:
         if (!s_quick_view_visible && widgetTextUS[0] != '\0') {
-          PUSH_SLOT(widgetTextUS,
-                    globalSettings.usePrimaryFontForAllWidgets ? primary_font
-                                                                : secondary_font,
-                    globalSettings.usePrimaryFontForAllWidgets ? primary_height
-                                                                : secondary_height,
-                    globalSettings.usePrimaryFontForAllWidgets ? primary_offset
-                                                                : secondary_offset,
-                    secondaryColor, group);
+          font = info_font_for_size(size, &fh, &fo);
+          PUSH_SLOT(widgetTextUS, font, fh, fo, secondaryColor, group);
         }
         break;
       case INFO_SLOT_UPPER_PRIMARY:
         if (widgetTextUP[0] != '\0') {
-          PUSH_SLOT(widgetTextUP, primary_font, primary_height, primary_offset,
-                    primaryColor, group);
+          font = info_font_for_size(size, &fh, &fo);
+          PUSH_SLOT(widgetTextUP, font, fh, fo, primaryColor, group);
         }
         break;
       case INFO_SLOT_TIME:
-        PUSH_SLOT(timeText, time_font, time_height, time_offset, timeColor,
-                  group);
+        font = time_font_for_size(size, &fh, &fo);
+        PUSH_SLOT(timeText, font, fh, fo, timeColor, group);
         time_pushed = true;
         break;
       case INFO_SLOT_LOWER_PRIMARY:
         if (widgetTextLP[0] != '\0') {
-          PUSH_SLOT(widgetTextLP, primary_font, primary_height, primary_offset,
-                    primaryColor, group);
+          font = info_font_for_size(size, &fh, &fo);
+          PUSH_SLOT(widgetTextLP, font, fh, fo, primaryColor, group);
         }
         break;
       case INFO_SLOT_LOWER_SECONDARY:
         if (!s_quick_view_visible && widgetTextLS[0] != '\0') {
-          PUSH_SLOT(widgetTextLS,
-                    globalSettings.usePrimaryFontForAllWidgets ? primary_font
-                                                                : secondary_font,
-                    globalSettings.usePrimaryFontForAllWidgets ? primary_height
-                                                                : secondary_height,
-                    globalSettings.usePrimaryFontForAllWidgets ? primary_offset
-                                                                : secondary_offset,
-                    secondaryColor, group);
+          font = info_font_for_size(size, &fh, &fo);
+          PUSH_SLOT(widgetTextLS, font, fh, fo, secondaryColor, group);
         }
         break;
     }
   }
 
   if (!time_pushed) {
-    PUSH_SLOT(timeText, time_font, time_height, time_offset, timeColor,
-              INFO_GROUP_CENTER);
+    int fh = 0, fo = 0;
+    GFont font = time_font_for_size(INFO_SIZE_DEFAULT, &fh, &fo);
+    PUSH_SLOT(timeText, font, fh, fo, timeColor, INFO_GROUP_CENTER);
   }
 
 #undef PUSH_SLOT
@@ -518,7 +534,6 @@ static void quickViewLayerReposition() {
   // bounds
   layer_set_frame(shiftingLayer,
                   GRect(0, 0, full_bounds.size.w, bounds.size.h));
-  layer_set_frame(ringLayer, GRect(0, 0, full_bounds.size.w, bounds.size.h));
 
   GRect centerFrame = get_center_frame(
       GRect(0, 0, full_bounds.size.w, bounds.size.h));
@@ -530,7 +545,6 @@ static void quickViewLayerReposition() {
   refresh_earth_layer(centerFrame);
 
   // Mark everything as dirty to redraw
-  layer_mark_dirty(ringLayer);
   layer_mark_dirty(centerLayer);
   layer_mark_dirty(infoLayer);
 }
@@ -563,9 +577,7 @@ static void update_clock() {
 
   // ensure colors are updated based on settings
   ColorTheme currentTheme = getCurrentColorTheme();
-  window_set_background_color(
-      mainWindow, globalSettings.showSolarRing ? currentTheme.ringStrokeColor
-                                               : currentTheme.bgColor);
+  window_set_background_color(mainWindow, currentTheme.bgColor);
   if (earthLayer) {
     bitmap_layer_set_background_color(earthLayer, currentTheme.bgColor);
   }
@@ -580,8 +592,6 @@ static void update_clock() {
   // is too expensive to run synchronously on the UI thread at launch.
   maybe_update_earth_async(now);
 
-  // redraw solar ring layer
-  layer_mark_dirty(ringLayer);
   layer_mark_dirty(centerLayer);
 }
 
@@ -591,9 +601,6 @@ void onSettingsChanged() {
 
   bool regionChanged =
       !earthBitmap || s_loaded_earth_region != globalSettings.region;
-  bool ringLayoutChanged =
-      s_loaded_show_solar_ring != globalSettings.showSolarRing;
-  s_loaded_show_solar_ring = globalSettings.showSolarRing;
 
   if (regionChanged) {
     cancel_earth_update_timer();
@@ -607,7 +614,7 @@ void onSettingsChanged() {
     bitmap_layer_set_background_color(earthLayer, getCurrentColorTheme().bgColor);
   }
 
-  if (windowLayer && (regionChanged || ringLayoutChanged)) {
+  if (windowLayer && regionChanged) {
     quickViewLayerReposition();
   }
 
@@ -635,9 +642,7 @@ static void main_window_load(Window *window) {
   // get information about the Window
   windowLayer = window_get_root_layer(window);
   ColorTheme currentTheme = getCurrentColorTheme();
-  window_set_background_color(
-      window, globalSettings.showSolarRing ? currentTheme.ringStrokeColor
-                                           : currentTheme.bgColor);
+  window_set_background_color(window, currentTheme.bgColor);
   GRect bounds = layer_get_bounds(windowLayer);
 
   shiftingLayer = layer_create(bounds);
@@ -653,7 +658,6 @@ static void main_window_load(Window *window) {
   // Earth globe — sits above the centre background, below the time text.
   earthBitmap = earth_init(globalSettings.region);
   s_loaded_earth_region = globalSettings.region;
-  s_loaded_show_solar_ring = globalSettings.showSolarRing;
   earthLayer = bitmap_layer_create(centerFrame);
   bitmap_layer_set_compositing_mode(earthLayer, GCompOpSet);
   bitmap_layer_set_background_color(earthLayer, currentTheme.bgColor);
@@ -664,11 +668,6 @@ static void main_window_load(Window *window) {
       GRect(0, centerFrame.origin.y, bounds.size.w, centerFrame.size.h));
   layer_set_update_proc(infoLayer, draw_center_text);
   layer_add_child(shiftingLayer, infoLayer);
-
-  // create ring layer
-  ringLayer = layer_create(bounds);
-  layer_set_update_proc(ringLayer, draw_ring_layer);
-  layer_add_child(shiftingLayer, ringLayer);
 
   // subscribe to the unobstructed area events
   UnobstructedAreaHandlers handlers = {.change = onUnobstructedAreaChange,
@@ -687,7 +686,6 @@ static void main_window_unload(Window *window) {
   cancel_earth_update_timer();
 
   // destroy everything
-  layer_destroy(ringLayer);
   layer_destroy(infoLayer);
   bitmap_layer_destroy(earthLayer);
   destroy_earth_display_bitmap();

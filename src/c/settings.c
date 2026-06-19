@@ -19,7 +19,6 @@ static void populateStoredSettingsExtra(StoredSettingsExtra *storedSettingsExtra
   storedSettingsExtra->usePrimaryFontForAllWidgets =
       globalSettings.usePrimaryFontForAllWidgets;
   storedSettingsExtra->region = globalSettings.region;
-  storedSettingsExtra->showSolarRing = globalSettings.showSolarRing;
   strncpy(storedSettingsExtra->infoLayout, globalSettings.infoLayout,
           INFO_LAYOUT_LEN);
   storedSettingsExtra->infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
@@ -102,7 +101,6 @@ void Settings_loadFromStorage() {
   globalSettings.localUtcOffset = 0;
   globalSettings.usePrimaryFontForAllWidgets = false;
   globalSettings.region = 0;  // Europe
-  globalSettings.showSolarRing = false;
   strncpy(globalSettings.infoLayout, DEFAULT_INFO_LAYOUT, INFO_LAYOUT_LEN);
   globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
 
@@ -142,7 +140,6 @@ void Settings_loadFromStorage() {
       globalSettings.usePrimaryFontForAllWidgets =
           storedSettingsExtra.usePrimaryFontForAllWidgets;
       globalSettings.region = storedSettingsExtra.region;
-      globalSettings.showSolarRing = storedSettingsExtra.showSolarRing;
       strncpy(globalSettings.infoLayout, storedSettingsExtra.infoLayout,
               INFO_LAYOUT_LEN);
       globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
@@ -152,17 +149,17 @@ void Settings_loadFromStorage() {
   // v4 redesign: force the dark globe look on upgrade. This intentionally
   // overrides any background colour chosen under the old (white-default)
   // theme — the new single background picker lets users re-pick afterwards.
-  // The solar ring defaults off so the bare globe shows by default.
   if (storedSettingsVersion < 4) {
     globalSettings.bgColor = DEFAULT_BG_COLOR;
     globalSettings.nightBgColor = DEFAULT_NIGHT_BG_COLOR;
-    globalSettings.showSolarRing = false;
   }
 
-  // v6 dropped the textOutlineStyle field that used to sit before infoLayout in
-  // StoredSettingsExtra. Reset infoLayout on upgrade so the one-byte layout
-  // shift in older blobs cannot leave a corrupted value behind.
-  if (storedSettingsVersion < 6 || globalSettings.infoLayout[0] == '\0') {
+  // v6 dropped textOutlineStyle and v7 dropped showSolarRing, both of which sat
+  // before infoLayout in StoredSettingsExtra. v8 added a per-line size field to
+  // the infoLayout entries ("id:group" -> "id:group:size"). Reset infoLayout on
+  // upgrade so neither the layout shift in older blobs nor the old two-field
+  // format can leave a corrupted or sizeless value behind.
+  if (storedSettingsVersion < 8 || globalSettings.infoLayout[0] == '\0') {
     strncpy(globalSettings.infoLayout, DEFAULT_INFO_LAYOUT, INFO_LAYOUT_LEN);
     globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
   }

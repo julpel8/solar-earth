@@ -3,13 +3,25 @@
 #include <pebble.h>
 #include <sys/syslimits.h>
 
-#define CURRENT_SETTINGS_VERSION 6
+#define CURRENT_SETTINGS_VERSION 8
 #define SETTINGS_VERSION_PERSIST_KEY 1
 #define SETTINGS_PERSIST_KEY 2
 #define SETTINGS_EXTRA_PERSIST_KEY 3
 #define ALT_CITY_LABEL_LEN 20
-#define INFO_LAYOUT_LEN 24
-#define DEFAULT_INFO_LAYOUT "0:0,1:0,2:1,3:2,4:2"
+// Each info-layout entry is "id:group:size" (e.g. "2:1:1"); five entries plus
+// commas need 30 bytes, so allow a little headroom.
+#define INFO_LAYOUT_LEN 32
+// id:group:size per line. size 0/1/2 = S/M/L. These defaults reproduce the
+// previous look: secondary lines (0,4) small, primary lines (1,3) and the time
+// (2) medium.
+#define DEFAULT_INFO_LAYOUT "0:0:0,1:0:1,2:1:1,3:2:1,4:2:0"
+
+// Per-line text size (S/M/L). Stored as the third field of each info-layout
+// entry; the time line maps these to a proportionally larger font family.
+#define INFO_SIZE_S 0
+#define INFO_SIZE_M 1
+#define INFO_SIZE_L 2
+#define INFO_SIZE_DEFAULT INFO_SIZE_M
 
 // default settings
 #ifdef PBL_COLOR
@@ -158,7 +170,6 @@ typedef struct {
   int16_t localUtcOffset;
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
-  bool showSolarRing;
   char infoLayout[INFO_LAYOUT_LEN];
 } Settings;
 
@@ -220,7 +231,6 @@ typedef struct {
   int16_t localUtcOffset;
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
-  bool showSolarRing;
   char infoLayout[INFO_LAYOUT_LEN];
 } StoredSettingsExtra;
 

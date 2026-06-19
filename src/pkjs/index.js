@@ -49,7 +49,9 @@ var WIDGET_SLOT_KEYS = [
   'SETTING_WIDGET_LOWER_SECONDARY'
 ];
 
-var DEFAULT_INFO_LAYOUT = '0:0,1:0,2:1,3:2,4:2';
+// Each entry is "id:group:size" — size 0/1/2 = S/M/L. Must match the C-side
+// DEFAULT_INFO_LAYOUT in settings.h.
+var DEFAULT_INFO_LAYOUT = '0:0:0,1:0:1,2:1:1,3:2:1,4:2:0';
 
 // Maps an info-layout slot id to its widget setting key (id 2 = time, no key).
 // Shared by settingsUseWeather() and injected into the config page.
@@ -169,7 +171,6 @@ function getDefaultConfigSettings() {
     SETTING_ALT_CITY2: 'UTC',
     SETTING_ALT_LABEL2: 'UTC',
     SETTING_REGION: 0,
-    SETTING_SHOW_SOLAR_RING: 0,
     SETTING_INFO_LAYOUT: DEFAULT_INFO_LAYOUT
   }, getDefaultWidgets());
 }
@@ -183,7 +184,7 @@ function settingsUseWeather(settings) {
   settings = settings || {};
   var activeKeys = {};
   String(settings.SETTING_INFO_LAYOUT || DEFAULT_INFO_LAYOUT).split(',').forEach(function (part) {
-    var match = /^([0-4]):[0-2]$/.exec(part);
+    var match = /^([0-4]):[0-2](?::[0-2])?$/.exec(part);
     if (match && SLOT_KEY_BY_ID[match[1]]) {
       activeKeys[SLOT_KEY_BY_ID[match[1]]] = true;
     }
@@ -377,6 +378,14 @@ function sendDataToWatch() {
   // Send temp unit setting
   msg['SETTING_TEMP_UNIT'] = isImperial ? 1 : 0;
 
+  // Send the language so the watch renders the date in the same language the
+  // weather condition was localized into here. Without this, the date (watch
+  // side, from globalSettings.language) and the weather (baked in here using
+  // `lang`) can desync — e.g. after a reinstall the watch defaults to English
+  // while the phone still has French cached, giving an English date next to a
+  // French weather string. English (0) is the default everywhere.
+  msg['SETTING_LANGUAGE'] = parseInt(lang, 10) || 0;
+
   console.log('Sending to watch: ' + JSON.stringify(msg));
 
   Pebble.sendAppMessage(msg,
@@ -546,7 +555,7 @@ function buildLocalConfigHtml(settings) {
     '.hint{color:#bbb;font-size:13px;margin-top:6px}',
     '#infoList{display:flex;flex-direction:column;gap:10px}',
     '.info-row{border:1px solid #333;border-radius:8px;padding:10px;background:#171717}',
-    '.info-grid{display:grid;grid-template-columns:1fr 110px;gap:8px}',
+    '.info-grid{display:grid;grid-template-columns:1fr 96px 70px;gap:8px}',
     '.info-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}',
     '.info-actions button,#addInfo{min-height:38px;background:#2b2b2b;color:#fff}',
     '.info-actions button:disabled,#addInfo:disabled{opacity:.35}',
@@ -558,12 +567,10 @@ function buildLocalConfigHtml(settings) {
     '.save{background:#ff7a00;color:#fff}.cancel{background:#333;color:#fff}',
     '</style></head><body><main>',
     '<h1>Solar Earth</h1>',
-    '<section><label class="row"><input id="ring" type="checkbox"> Show solar ring and day/night edge</label>',
-    '<div class="hint">Also hides the hour pips when turned off.</div></section>',
     '<section><label for="bg">Background color</label><input id="bg" type="color"></section>',
     '<section><label>Displayed info</label><div id="infoList"></div>',
     '<button id="addInfo" type="button">Add info</button>',
-    '<div class="hint">Up to 5 lines including the time. The time line cannot be removed.</div></section>',
+    '<div class="hint">Up to 5 lines including the time. Pick where each line sits and its text size (S/M/L); the time is always larger than the others. The time line cannot be removed.</div></section>',
     '<section><label for="lang">Date language</label><select id="lang"></select></section>',
     '<section><label for="tempUnit">Temperature unit</label><select id="tempUnit">',
     '<option value="0">Celsius</option><option value="1">Fahrenheit</option>',
@@ -592,27 +599,26 @@ function buildLocalConfigHtml(settings) {
     'function clampText(v){return String(v||"").slice(0,47)}',
     'function hasId(id){for(var i=0;i<rows.length;i++){if(rows[i].id===id)return true}return false}',
     'function firstUnusedSlot(){for(var i=0;i<optionalIds.length;i++){if(!hasId(optionalIds[i]))return optionalIds[i]}return null}',
-    'function parseLayout(s){var out=[],seen={};String(s||DEFAULT_INFO_LAYOUT).split(",").forEach(function(part){var m=/^([0-4]):([0-2])$/.exec(part);if(!m)return;var id=num(m[1],-1),g=num(m[2],1);if(seen[id])return;seen[id]=1;if(id!==2&&!settings[slotKeys[id]])return;out.push({id:id,group:g})});if(!seen[2])out.splice(Math.min(2,out.length),0,{id:2,group:1});return out.slice(0,5)}',
+    'function parseLayout(s){var out=[],seen={};String(s||DEFAULT_INFO_LAYOUT).split(",").forEach(function(part){var m=/^([0-4]):([0-2])(?::([0-2]))?$/.exec(part);if(!m)return;var id=num(m[1],-1),g=num(m[2],1),sz=num(m[3],1);if(seen[id])return;seen[id]=1;if(id!==2&&!settings[slotKeys[id]])return;out.push({id:id,group:g,size:sz})});if(!seen[2])out.splice(Math.min(2,out.length),0,{id:2,group:1,size:1});return out.slice(0,5)}',
     'function optionValueFor(v){for(var i=0;i<widgetOptions.length;i++){if(widgetOptions[i].v===v)return v}return "__custom__"}',
     'function fillSelect(sel,value){for(var i=0;i<widgetOptions.length;i++){var o=document.createElement("option");o.value=widgetOptions[i].v;o.textContent=widgetOptions[i].l;sel.appendChild(o)}sel.value=optionValueFor(value)}',
     'function groupSelect(value){var sel=document.createElement("select");[["0","Top"],["1","Center"],["2","Bottom"]].forEach(function(g){var o=document.createElement("option");o.value=g[0];o.textContent=g[1];sel.appendChild(o)});sel.value=String(value);return sel}',
+    'function sizeSelect(value){var sel=document.createElement("select");[["0","S"],["1","M"],["2","L"]].forEach(function(g){var o=document.createElement("option");o.value=g[0];o.textContent=g[1];sel.appendChild(o)});sel.value=String(value);return sel}',
     'function groupIndices(g){var a=[];for(var i=0;i<rows.length;i++){if(rows[i].group===g)a.push(i)}return a}',
     'function moveWithin(idx,dir){var order=groupIndices(rows[idx].group);var pos=order.indexOf(idx);var sw=order[pos+dir];if(sw===undefined)return;var t=rows[idx];rows[idx]=rows[sw];rows[sw]=t;renderRows()}',
-    'function makeCard(idx,pos,len){var row=rows[idx];var card=document.createElement("div");card.className="info-row";var grid=document.createElement("div");grid.className="info-grid";var info=document.createElement("select");var fmt=document.createElement("input");fmt.type="text";fmt.className="fmt";fmt.maxLength=47;if(row.id===2){var t=document.createElement("option");t.value="time";t.textContent="Time";info.appendChild(t);info.disabled=true;fmt.value="Time";fmt.disabled=true}else{var key=slotKeys[row.id];fmt.value=clampText(settings[key]);fillSelect(info,settings[key]);info.onchange=function(){if(info.value!=="__custom__"){fmt.value=info.value;settings[key]=fmt.value}else{fmt.focus()}};fmt.oninput=function(){settings[key]=clampText(fmt.value);info.value=optionValueFor(settings[key])}}var grp=groupSelect(row.group);grp.onchange=function(){row.group=num(grp.value,1);renderRows()};grid.appendChild(info);grid.appendChild(grp);card.appendChild(grid);card.appendChild(fmt);var acts=document.createElement("div");acts.className="info-actions";var up=document.createElement("button");up.type="button";up.textContent="Up";up.disabled=pos===0;up.onclick=function(){moveWithin(idx,-1)};var down=document.createElement("button");down.type="button";down.textContent="Down";down.disabled=pos===len-1;down.onclick=function(){moveWithin(idx,1)};var del=document.createElement("button");del.type="button";del.textContent="Delete";del.disabled=row.id===2;del.onclick=function(){if(row.id!==2){settings[slotKeys[row.id]]="";rows.splice(idx,1);renderRows()}};acts.appendChild(up);acts.appendChild(down);acts.appendChild(del);card.appendChild(acts);return card}',
+    'function makeCard(idx,pos,len){var row=rows[idx];var card=document.createElement("div");card.className="info-row";var grid=document.createElement("div");grid.className="info-grid";var info=document.createElement("select");var fmt=document.createElement("input");fmt.type="text";fmt.className="fmt";fmt.maxLength=47;if(row.id===2){var t=document.createElement("option");t.value="time";t.textContent="Time";info.appendChild(t);info.disabled=true;fmt.value="Time";fmt.disabled=true}else{var key=slotKeys[row.id];fmt.value=clampText(settings[key]);fillSelect(info,settings[key]);info.onchange=function(){if(info.value!=="__custom__"){fmt.value=info.value;settings[key]=fmt.value}else{fmt.focus()}};fmt.oninput=function(){settings[key]=clampText(fmt.value);info.value=optionValueFor(settings[key])}}var grp=groupSelect(row.group);grp.onchange=function(){row.group=num(grp.value,1);renderRows()};var szl=sizeSelect(row.size);szl.onchange=function(){row.size=num(szl.value,1)};grid.appendChild(info);grid.appendChild(grp);grid.appendChild(szl);card.appendChild(grid);card.appendChild(fmt);var acts=document.createElement("div");acts.className="info-actions";var up=document.createElement("button");up.type="button";up.textContent="Up";up.disabled=pos===0;up.onclick=function(){moveWithin(idx,-1)};var down=document.createElement("button");down.type="button";down.textContent="Down";down.disabled=pos===len-1;down.onclick=function(){moveWithin(idx,1)};var del=document.createElement("button");del.type="button";del.textContent="Delete";del.disabled=row.id===2;del.onclick=function(){if(row.id!==2){settings[slotKeys[row.id]]="";rows.splice(idx,1);renderRows()}};acts.appendChild(up);acts.appendChild(down);acts.appendChild(del);card.appendChild(acts);return card}',
     'function renderRows(){var list=$("infoList");list.innerHTML="";var groups=[[0,"Top"],[1,"Center"],[2,"Bottom"]];for(var gi=0;gi<groups.length;gi++){var g=groups[gi][0];var sec=document.createElement("div");sec.className="info-group";var h=document.createElement("div");h.className="group-title";h.textContent=groups[gi][1];sec.appendChild(h);var order=groupIndices(g);if(order.length===0){var em=document.createElement("div");em.className="hint";em.textContent="\\u2014";sec.appendChild(em)}for(var k=0;k<order.length;k++){sec.appendChild(makeCard(order[k],k,order.length))}list.appendChild(sec)}$("addInfo").disabled=rows.length>=5||firstUnusedSlot()===null}',
-    'function saveRows(){var active={};var parts=[];for(var i=0;i<rows.length;i++){var r=rows[i];if(r.id===2){parts.push("2:"+num(r.group,1));continue}var key=slotKeys[r.id];settings[key]=clampText(settings[key]);if(settings[key]){active[r.id]=1;parts.push(r.id+":"+num(r.group,1))}}for(var j=0;j<optionalIds.length;j++){if(!active[optionalIds[j]])settings[slotKeys[optionalIds[j]]]="";}settings.SETTING_INFO_LAYOUT=parts.slice(0,5).join(",")}',
-    '$("ring").checked=num(settings.SETTING_SHOW_SOLAR_RING,0)!==0;',
+    'function saveRows(){var active={};var parts=[];for(var i=0;i<rows.length;i++){var r=rows[i];if(r.id===2){parts.push("2:"+num(r.group,1)+":"+num(r.size,1));continue}var key=slotKeys[r.id];settings[key]=clampText(settings[key]);if(settings[key]){active[r.id]=1;parts.push(r.id+":"+num(r.group,1)+":"+num(r.size,1))}}for(var j=0;j<optionalIds.length;j++){if(!active[optionalIds[j]])settings[slotKeys[optionalIds[j]]]="";}settings.SETTING_INFO_LAYOUT=parts.slice(0,5).join(",")}',
     '$("bg").value="#"+hex(settings.SETTING_BG_COLOR||settings.SETTING_NIGHT_BG_COLOR);',
     '$("region").value=String(num(settings.SETTING_REGION,0));',
     '$("tempUnit").value=String(num(settings.SETTING_TEMP_UNIT,0));',
     'for(var li=0;li<languages.length;li++){var lo=document.createElement("option");lo.value=String(li);lo.textContent=languages[li];$("lang").appendChild(lo)}',
     '$("lang").value=String(num(settings.SETTING_LANGUAGE,0));',
     'rows=parseLayout(settings.SETTING_INFO_LAYOUT);renderRows();',
-    '$("addInfo").onclick=function(){var id=firstUnusedSlot();if(id===null||rows.length>=5)return;settings[slotKeys[id]]="{local_date}";rows.push({id:id,group:1});renderRows()};',
+    '$("addInfo").onclick=function(){var id=firstUnusedSlot();if(id===null||rows.length>=5)return;settings[slotKeys[id]]="{local_date}";rows.push({id:id,group:1,size:1});renderRows()};',
     '$("cancel").onclick=function(){location.href="pebblejs://close#CANCELLED"};',
     '$("save").onclick=function(){',
     'saveRows();',
-    'settings.SETTING_SHOW_SOLAR_RING=$("ring").checked?1:0;',
     'var bg=hex($("bg").value);settings.SETTING_BG_COLOR=bg;settings.SETTING_NIGHT_BG_COLOR=bg;',
     'settings.SETTING_REGION=num($("region").value,0);',
     'settings.SETTING_TEMP_UNIT=num($("tempUnit").value,0);',

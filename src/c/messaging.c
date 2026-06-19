@@ -126,8 +126,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   Tuple *localUtcOffset_tuple =
       dict_find(iterator, MESSAGE_KEY_LOCAL_UTC_OFFSET);
   Tuple *region_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_REGION);
-  Tuple *showSolarRing_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_SHOW_SOLAR_RING);
   Tuple *infoLayout_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_INFO_LAYOUT);
 
   if (timeColor_tuple != NULL) {
@@ -354,12 +352,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
     globalSettings.region = region < EARTH_NUM_REGIONS ? region : 0;
     APP_LOG(APP_LOG_LEVEL_INFO, "Received region: %d",
             (int)globalSettings.region);
-  }
-
-  if (showSolarRing_tuple != NULL) {
-    globalSettings.showSolarRing = (bool)showSolarRing_tuple->value->int8;
-    APP_LOG(APP_LOG_LEVEL_INFO, "Received showSolarRing: %d",
-            globalSettings.showSolarRing);
   }
 
   if (infoLayout_tuple != NULL) {

@@ -94,6 +94,62 @@ var CONFIG_WIDGET_OPTIONS = [
   { v: '__custom__', l: 'Custom' }
 ];
 
+// Reference shown by the "?" help modal in the Displayed info section. Mirrors
+// the token list documented for the (removed) web config; grouped by category.
+var CONFIG_WIDGET_HELP = [
+  { cat: 'Date & Time', items: [
+    { tok: '{local_date}', desc: 'Full localized date, in the selected language format.' },
+    { tok: '{day_name}', desc: 'Abbreviated weekday name (e.g. MON).' },
+    { tok: '{month_name}', desc: 'Abbreviated month name (e.g. JAN).' },
+    { tok: '{day}', desc: 'Day of the month (1-31).' },
+    { tok: '{day0}', desc: 'Day of the month, zero-padded (01-31).' },
+    { tok: '{month_num}', desc: 'Month number, zero-padded (01-12).' },
+    { tok: '{year}', desc: 'Four-digit year.' },
+    { tok: '{day_of_year}', desc: 'Day number within the year (1-366).' },
+    { tok: '{week_of_year}', desc: 'ISO week number (1-53).' }
+  ] },
+  { cat: 'World Time', items: [
+    { tok: '{alt_tz}', desc: 'Time zone 1: label, time, and day (day shown only when it differs).' },
+    { tok: '{alt_tz_label}', desc: 'Time zone 1 label only.' },
+    { tok: '{alt_tz_time}', desc: 'Time zone 1 time only.' },
+    { tok: '{alt_tz_day}', desc: 'Time zone 1 weekday only.' },
+    { tok: '{alt_tz2}', desc: 'Time zone 2: label, time, and day (day shown only when it differs).' },
+    { tok: '{alt_tz2_label}', desc: 'Time zone 2 label only.' },
+    { tok: '{alt_tz2_time}', desc: 'Time zone 2 time only.' },
+    { tok: '{alt_tz2_day}', desc: 'Time zone 2 weekday only.' }
+  ] },
+  { cat: 'Solar', items: [
+    { tok: '{sunrise}', desc: "Today's sunrise time." },
+    { tok: '{sunset}', desc: "Today's sunset time." },
+    { tok: '{next_solar}', desc: 'Next solar event: label and time.' },
+    { tok: '{next_solar_label}', desc: 'Label of the next solar event (RISE or SET).' },
+    { tok: '{next_solar_time}', desc: 'Time of the next solar event.' }
+  ] },
+  { cat: 'Health & Device', items: [
+    { tok: '{steps}', desc: 'Step count for today.' },
+    { tok: '{dist}', desc: 'Distance walked today (value only).' },
+    { tok: '{dist_unit}', desc: 'Distance unit (KM or MI).' },
+    { tok: '{hr}', desc: 'Current heart rate (value only).' },
+    { tok: '{batt}', desc: 'Battery level percentage (value only).' }
+  ] },
+  { cat: 'Weather', items: [
+    { tok: '{temp}', desc: 'Current temperature (value only).' },
+    { tok: '{thi}', desc: 'Forecast high temperature (value only).' },
+    { tok: '{tlo}', desc: 'Forecast low temperature (value only).' },
+    { tok: '{cond}', desc: 'Current weather condition.' },
+    { tok: '{cond_day}', desc: 'Daytime weather condition.' },
+    { tok: '{hum}', desc: 'Relative humidity (value only).' },
+    { tok: '{wind}', desc: 'Wind speed (value only).' },
+    { tok: '{wind_unit}', desc: 'Wind speed unit (KM/H or MPH).' },
+    { tok: '{wind_dir}', desc: 'Wind direction (cardinal, e.g. NW).' },
+    { tok: '{uv}', desc: 'UV index (value only).' },
+    { tok: '{rain}', desc: 'Rain amount (value only).' },
+    { tok: '{pop}', desc: 'Chance of rain percentage (value only).' },
+    { tok: '{dew}', desc: 'Dew point temperature (value only).' },
+    { tok: '{temp_unit}', desc: 'Temperature unit (°C or °F).' }
+  ] }
+];
+
 var CONFIG_LANGUAGES = [
   'English', 'French', 'German', 'Spanish', 'Italian', 'Dutch',
   'Turkish', 'Czech', 'Portuguese', 'Greek', 'Swedish', 'Polish', 'Slovak',
@@ -576,10 +632,23 @@ function buildLocalConfigHtml(settings) {
     '.actions{display:flex;gap:10px;margin-top:20px}',
     'button{flex:1;min-height:46px;border:0;border-radius:8px;font:inherit;font-weight:750}',
     '.save{background:#ff7a00;color:#fff}.cancel{background:#333;color:#fff}',
+    '.lbl-row{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}',
+    '.lbl-row label{margin:0}',
+    '.help-btn{flex:0 0 auto;width:30px;height:30px;min-height:30px;border-radius:50%;background:#2b2b2b;color:#fff;font-weight:700;border:1px solid #444;padding:0}',
+    '.help-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:50;padding:16px;box-sizing:border-box;overflow:auto}',
+    '.help-overlay.open{display:block}',
+    '.help-modal{max-width:520px;margin:18px auto;background:#171717;border:1px solid #333;border-radius:10px;padding:16px}',
+    '.help-modal h2{font-size:18px;margin:0 0 4px}',
+    '.help-close{float:right;width:34px;height:34px;min-height:34px;background:#2b2b2b;color:#fff;border-radius:6px;border:1px solid #444;font-size:18px}',
+    '.help-cat{font-weight:700;font-size:12px;color:#ff9a3c;text-transform:uppercase;letter-spacing:.6px;margin:14px 0 6px}',
+    '.help-item{padding:6px 0;border-top:1px solid #262626}',
+    '.help-item code{background:#202020;border:1px solid #333;border-radius:4px;padding:1px 6px;font-size:13px;color:#9ad}',
+    '.help-desc{display:block;color:#bbb;font-size:13px;margin-top:3px}',
     '</style></head><body><main>',
     '<h1>Solar Earth</h1>',
     '<section><label for="bg">Background color</label><input id="bg" type="color"></section>',
-    '<section><label>Displayed info</label><div id="infoList"></div>',
+    '<section><div class="lbl-row"><label>Displayed info</label>',
+    '<button id="helpBtn" type="button" class="help-btn" aria-label="Variable help">?</button></div><div id="infoList"></div>',
     '<button id="addInfo" type="button">Add info</button>',
     '<div class="hint">Up to 5 lines including the time. Pick where each line sits and its text size (S/M/L); the time is always larger than the others. The time line cannot be removed.</div></section>',
     '<section><label for="lang">Date language</label><select id="lang"></select></section>',
@@ -602,9 +671,15 @@ function buildLocalConfigHtml(settings) {
     '</select></section>',
     '<div class="actions"><button class="cancel" id="cancel" type="button">Cancel</button>',
     '<button class="save" id="save" type="button">Save</button></div>',
+    '<div id="helpOverlay" class="help-overlay"><div class="help-modal">',
+    '<button id="helpClose" type="button" class="help-close">×</button>',
+    '<h2>Text variables</h2>',
+    '<div class="hint">Mix plain text with variables in braces. Each is replaced with live data from the watch. Use {t:KEY} for translated labels (e.g. {t:STEPS}).</div>',
+    '<div id="helpBody"></div></div></div>',
     '</main><script>',
     'var settings=' + settingsJson + ';',
     'var widgetOptions=' + widgetOptionsJson + ';',
+    'var widgetHelp=' + safeScriptJson(CONFIG_WIDGET_HELP) + ';',
     'var languages=' + languagesJson + ';',
     'var DEFAULT_INFO_LAYOUT="' + DEFAULT_INFO_LAYOUT + '";',
     'var slotKeys=' + safeScriptJson(SLOT_KEY_BY_ID) + ';',
@@ -634,6 +709,12 @@ function buildLocalConfigHtml(settings) {
     '$("lang").value=String(num(settings.SETTING_LANGUAGE,0));',
     'rows=parseLayout(settings.SETTING_INFO_LAYOUT);renderRows();',
     '$("addInfo").onclick=function(){var id=firstUnusedSlot();if(id===null||rows.length>=5)return;settings[slotKeys[id]]="{local_date}";rows.push({id:id,group:1,size:1});renderRows()};',
+    'function renderHelp(){var b=$("helpBody");if(b.childNodes.length)return;for(var i=0;i<widgetHelp.length;i++){var g=widgetHelp[i];var h=document.createElement("div");h.className="help-cat";h.textContent=g.cat;b.appendChild(h);for(var j=0;j<g.items.length;j++){var it=g.items[j];var row=document.createElement("div");row.className="help-item";var c=document.createElement("code");c.textContent=it.tok;row.appendChild(c);var d=document.createElement("span");d.className="help-desc";d.textContent=it.desc;row.appendChild(d);b.appendChild(row)}}}',
+    'function openHelp(){renderHelp();$("helpOverlay").classList.add("open")}',
+    'function closeHelp(){$("helpOverlay").classList.remove("open")}',
+    '$("helpBtn").onclick=openHelp;',
+    '$("helpClose").onclick=closeHelp;',
+    '$("helpOverlay").onclick=function(e){if(e.target===$("helpOverlay"))closeHelp()};',
     '$("cancel").onclick=function(){location.href="pebblejs://close#CANCELLED"};',
     '$("save").onclick=function(){',
     'saveRows();',

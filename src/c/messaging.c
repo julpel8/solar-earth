@@ -95,6 +95,9 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   Tuple *showLeadingZero_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_SHOW_LEADING_ZERO);
 
+  Tuple *timeFormat_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_TIME_FORMAT);
+
   Tuple *pipVisibility_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_PIP_VISIBILITY);
 
@@ -279,6 +282,12 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
 
   if (showLeadingZero_tuple != NULL) {
     globalSettings.showLeadingZero = (bool)showLeadingZero_tuple->value->int8;
+  }
+
+  if (timeFormat_tuple != NULL) {
+    uint8_t tf = (uint8_t)timeFormat_tuple->value->int8;
+    globalSettings.timeFormat =
+        tf <= TIME_FORMAT_12H_AMPM ? tf : TIME_FORMAT_SYSTEM;
   }
 
   if (widgetUpperSecondary_tuple != NULL) {

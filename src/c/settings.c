@@ -22,6 +22,7 @@ static void populateStoredSettingsExtra(StoredSettingsExtra *storedSettingsExtra
   strncpy(storedSettingsExtra->infoLayout, globalSettings.infoLayout,
           INFO_LAYOUT_LEN);
   storedSettingsExtra->infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
+  storedSettingsExtra->timeFormat = globalSettings.timeFormat;
 }
 
 void Settings_init() { Settings_loadFromStorage(); }
@@ -75,6 +76,7 @@ void Settings_loadFromStorage() {
   globalSettings.pipVisibility = PIP_SHOW_ALL;
   globalSettings.tempUnit = TEMP_UNIT_CELSIUS;
   globalSettings.language = 0;
+  globalSettings.timeFormat = TIME_FORMAT_SYSTEM;
 
   // widget slot defaults
   // Weather-dependent slots use placeholders until JS sends real data.
@@ -143,6 +145,7 @@ void Settings_loadFromStorage() {
       strncpy(globalSettings.infoLayout, storedSettingsExtra.infoLayout,
               INFO_LAYOUT_LEN);
       globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
+      globalSettings.timeFormat = storedSettingsExtra.timeFormat;
     }
   }
 
@@ -206,6 +209,23 @@ static int16_t get_local_utc_offset(void) {
 
 void Settings_updateDynamicSettings() {
   globalSettings.localUtcOffset = get_local_utc_offset();
+}
+
+bool settings_is_24h(void) {
+  switch ((TimeFormatType)globalSettings.timeFormat) {
+    case TIME_FORMAT_24H:
+      return true;
+    case TIME_FORMAT_12H:
+    case TIME_FORMAT_12H_AMPM:
+      return false;
+    case TIME_FORMAT_SYSTEM:
+    default:
+      return clock_is_24h_style();
+  }
+}
+
+bool settings_show_am_pm(void) {
+  return (TimeFormatType)globalSettings.timeFormat == TIME_FORMAT_12H_AMPM;
 }
 
 ColorTheme getCurrentColorTheme() {

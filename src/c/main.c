@@ -10,8 +10,8 @@
 #include "solarUtils.h"
 #include "utils.h"
 
-#define FORCE_12H false
-#define TIME_STR_LEN 6
+// Long enough for "12:30 PM" plus the null terminator.
+#define TIME_STR_LEN 12
 
 // Heartbeat timer: the watch requests data from the phone on this interval
 #define UPDATE_REQUEST_INTERVAL_MS (30 * 60 * 1000) // 30 minutes
@@ -68,8 +68,10 @@ static void update_clock() {
   struct tm *timeInfo = getCurrentTime();
 
   // set time string
-  if (clock_is_24h_style() && !FORCE_12H) {
+  if (settings_is_24h()) {
     strftime(timeText, TIME_STR_LEN, "%H:%M", timeInfo);
+  } else if (settings_show_am_pm()) {
+    strftime(timeText, TIME_STR_LEN, "%I:%M %p", timeInfo);
   } else {
     strftime(timeText, TIME_STR_LEN, "%I:%M", timeInfo);
   }

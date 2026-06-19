@@ -3,7 +3,7 @@
 #include <pebble.h>
 #include <sys/syslimits.h>
 
-#define CURRENT_SETTINGS_VERSION 8
+#define CURRENT_SETTINGS_VERSION 9
 #define SETTINGS_VERSION_PERSIST_KEY 1
 #define SETTINGS_PERSIST_KEY 2
 #define SETTINGS_EXTRA_PERSIST_KEY 3
@@ -94,6 +94,13 @@ typedef enum {
 
 typedef enum { TEMP_UNIT_CELSIUS = 0, TEMP_UNIT_FAHRENHEIT = 1 } TempUnitType;
 
+typedef enum {
+  TIME_FORMAT_SYSTEM = 0,    // follow the watch's 12h/24h system setting
+  TIME_FORMAT_24H = 1,       // force 24-hour
+  TIME_FORMAT_12H = 2,       // force 12-hour, no AM/PM suffix
+  TIME_FORMAT_12H_AMPM = 3   // force 12-hour with AM/PM suffix on the main time
+} TimeFormatType;
+
 // typedef enum {
 //   NO_VIBE = 0,
 //   VIBE_EVERY_HOUR = 1,
@@ -171,6 +178,7 @@ typedef struct {
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
   char infoLayout[INFO_LAYOUT_LEN];
+  uint8_t timeFormat;  // TimeFormatType
 } Settings;
 
 typedef struct {
@@ -232,6 +240,7 @@ typedef struct {
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
   char infoLayout[INFO_LAYOUT_LEN];
+  uint8_t timeFormat;  // TimeFormatType; appended last so old blobs keep default
 } StoredSettingsExtra;
 
 typedef char StoredSettings_must_fit_in_persist_data
@@ -242,6 +251,13 @@ typedef char StoredSettingsExtra_must_fit_in_persist_data
 extern Settings globalSettings;
 
 ColorTheme getCurrentColorTheme();
+
+// Resolve the effective time format from globalSettings.timeFormat.
+// settings_is_24h() honours the TIME_FORMAT_SYSTEM choice by falling back to
+// the watch's clock_is_24h_style(). settings_show_am_pm() is true only for the
+// explicit "12-hour with AM/PM" option (controls the main time line).
+bool settings_is_24h(void);
+bool settings_show_am_pm(void);
 
 void Settings_init();
 void Settings_deinit();

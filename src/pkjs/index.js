@@ -164,6 +164,7 @@ function getDefaultConfigSettings() {
     SETTING_USE_NIGHT_THEME: 1,
     SETTING_PIP_VISIBILITY: 0,
     SETTING_SHOW_LEADING_ZERO: 0,
+    SETTING_TIME_FORMAT: 0,
     SETTING_TEMP_UNIT: 0,
     SETTING_LANGUAGE: 0,
     SETTING_ALT_CITY: 'TOKYO',
@@ -205,6 +206,16 @@ function settingsUseWeather(settings) {
 }
 
 // ---- Time helpers ----
+
+// Resolve the effective 24h flag from the time-format setting, mirroring the
+// C-side settings_is_24h(). 0 = follow the watch (cachedIs24h), 1 = 24h,
+// 2/3 = 12h. Used so JS-formatted solar tokens match the watch's main time.
+function resolveUse24h(settings) {
+  var tf = parseInt(settings && settings.SETTING_TIME_FORMAT, 10);
+  if (tf === 1) return true;
+  if (tf === 2 || tf === 3) return false;
+  return cachedIs24h;
+}
 
 function formatMinutes(minutes, use24h) {
   if (minutes < 0) return '--:--';
@@ -339,7 +350,7 @@ function sendDataToWatch() {
 
   var isImperial = (settings.SETTING_TEMP_UNIT === 1);
   var lang = settings.SETTING_LANGUAGE || 0;
-  var use24h = cachedIs24h;
+  var use24h = resolveUse24h(settings);
   var weather = Weather.isDisplayable(cachedWeather) ? cachedWeather : null;
   var defaultWidgets = getDefaultWidgets();
 
@@ -572,6 +583,12 @@ function buildLocalConfigHtml(settings) {
     '<button id="addInfo" type="button">Add info</button>',
     '<div class="hint">Up to 5 lines including the time. Pick where each line sits and its text size (S/M/L); the time is always larger than the others. The time line cannot be removed.</div></section>',
     '<section><label for="lang">Date language</label><select id="lang"></select></section>',
+    '<section><label for="timeFormat">Time format</label><select id="timeFormat">',
+    '<option value="0">Watch default</option>',
+    '<option value="1">24-hour</option>',
+    '<option value="2">12-hour</option>',
+    '<option value="3">12-hour (AM/PM)</option>',
+    '</select></section>',
     '<section><label for="tempUnit">Temperature unit</label><select id="tempUnit">',
     '<option value="0">Celsius</option><option value="1">Fahrenheit</option>',
     '</select></section>',
@@ -612,6 +629,7 @@ function buildLocalConfigHtml(settings) {
     '$("bg").value="#"+hex(settings.SETTING_BG_COLOR||settings.SETTING_NIGHT_BG_COLOR);',
     '$("region").value=String(num(settings.SETTING_REGION,0));',
     '$("tempUnit").value=String(num(settings.SETTING_TEMP_UNIT,0));',
+    '$("timeFormat").value=String(num(settings.SETTING_TIME_FORMAT,0));',
     'for(var li=0;li<languages.length;li++){var lo=document.createElement("option");lo.value=String(li);lo.textContent=languages[li];$("lang").appendChild(lo)}',
     '$("lang").value=String(num(settings.SETTING_LANGUAGE,0));',
     'rows=parseLayout(settings.SETTING_INFO_LAYOUT);renderRows();',
@@ -622,6 +640,7 @@ function buildLocalConfigHtml(settings) {
     'var bg=hex($("bg").value);settings.SETTING_BG_COLOR=bg;settings.SETTING_NIGHT_BG_COLOR=bg;',
     'settings.SETTING_REGION=num($("region").value,0);',
     'settings.SETTING_TEMP_UNIT=num($("tempUnit").value,0);',
+    'settings.SETTING_TIME_FORMAT=num($("timeFormat").value,0);',
     'settings.SETTING_LANGUAGE=num($("lang").value,0);',
     'location.href="pebblejs://close#"+encodeURIComponent(JSON.stringify(settings));',
     '};',

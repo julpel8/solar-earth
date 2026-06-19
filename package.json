@@ -2,7 +2,7 @@
   "name": "solar-earth-pebble",
   "author": "julpel8",
   "description": "A Pebble watchface showing a day/night globe behind the time. The terminator follows the real position of the sun, and the night side shows city lights after dark. Center the globe on your region and configure the info lines (date, weather, sunrise/sunset, steps, a second time zone…). Globe day/night shading inspired by Joshua Simmons' Blue Pebble; clock layout and widgets inspired by Freakified's Halcyon.",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "license": "MIT",
   "keywords": [
     "pebble-watchface",

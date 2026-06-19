@@ -3,7 +3,7 @@
 #include <pebble.h>
 #include <sys/syslimits.h>
 
-#define CURRENT_SETTINGS_VERSION 5
+#define CURRENT_SETTINGS_VERSION 6
 #define SETTINGS_VERSION_PERSIST_KEY 1
 #define SETTINGS_PERSIST_KEY 2
 #define SETTINGS_EXTRA_PERSIST_KEY 3
@@ -82,11 +82,6 @@ typedef enum {
 
 typedef enum { TEMP_UNIT_CELSIUS = 0, TEMP_UNIT_FAHRENHEIT = 1 } TempUnitType;
 
-typedef enum {
-  TEXT_OUTLINE_BLACK_WITH_WHITE = 0,
-  TEXT_OUTLINE_WHITE_WITH_BLACK = 1
-} TextOutlineStyle;
-
 // typedef enum {
 //   NO_VIBE = 0,
 //   VIBE_EVERY_HOUR = 1,
@@ -164,7 +159,6 @@ typedef struct {
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
   bool showSolarRing;
-  uint8_t textOutlineStyle;
   char infoLayout[INFO_LAYOUT_LEN];
 } Settings;
 
@@ -227,7 +221,6 @@ typedef struct {
   bool usePrimaryFontForAllWidgets;
   uint8_t region;  // globe centre region (EarthRegion)
   bool showSolarRing;
-  uint8_t textOutlineStyle;
   char infoLayout[INFO_LAYOUT_LEN];
 } StoredSettingsExtra;
 

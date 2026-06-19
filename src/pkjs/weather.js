@@ -24,7 +24,7 @@ function isDisplayableWeather(weather) {
 }
 
 function clearWeather() {
-  localStorage.removeItem('halcyonWeather');
+  localStorage.removeItem('solarEarthWeather');
 }
 
 function fetchWeather(lat, lng, callback, errback) {
@@ -76,7 +76,7 @@ function fetchWeather(lat, lng, callback, errback) {
         fetchedAt: Date.now()
       };
 
-      localStorage.setItem('halcyonWeather', JSON.stringify(weather));
+      localStorage.setItem('solarEarthWeather', JSON.stringify(weather));
       console.log('Weather fetched: ' + JSON.stringify(weather));
 
       if (callback) callback(weather);
@@ -90,7 +90,7 @@ function fetchWeather(lat, lng, callback, errback) {
 }
 
 function restoreWeather() {
-  var saved = localStorage.getItem('halcyonWeather');
+  var saved = localStorage.getItem('solarEarthWeather');
   if (saved) {
     try {
       var weather = JSON.parse(saved);

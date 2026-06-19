@@ -9,7 +9,6 @@ import {
   ThemePicker,
   CustomThemePanel,
   WidgetSelector,
-  DonationLink,
   AltTimezoneSection,
 } from '../components';
 import { useSavedThemes } from '../hooks/useSavedThemes';
@@ -65,7 +64,7 @@ export const SettingsPage: React.FC = () => {
     savedThemes.savedThemes.find((t) => t.id === settings.SETTING_NIGHT_THEME);
 
   return (
-    <Page title="Halcyon Settings">
+    <Page title="Solar Earth Settings">
       <Section title="Theme">
         <ThemePicker
           messageKey="SETTING_THEME"
@@ -321,7 +320,6 @@ export const SettingsPage: React.FC = () => {
           ]}
         />
       </Section>
-      <DonationLink />
     </Page>
   );
 };

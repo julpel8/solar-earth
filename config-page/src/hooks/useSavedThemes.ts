@@ -8,7 +8,7 @@ export interface SavedTheme {
     settings: Record<string, string>;
 }
 
-const STORAGE_KEY = 'halcyon-saved-themes';
+const STORAGE_KEY = 'solar-earth-saved-themes';
 
 /** Color setting keys for a day theme — the canonical storage format */
 export const DAY_THEME_KEYS: (keyof Settings)[] = [

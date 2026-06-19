@@ -128,8 +128,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   Tuple *region_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_REGION);
   Tuple *showSolarRing_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_SHOW_SOLAR_RING);
-  Tuple *textOutlineStyle_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_TEXT_OUTLINE_STYLE);
   Tuple *infoLayout_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_INFO_LAYOUT);
 
   if (timeColor_tuple != NULL) {
@@ -362,15 +360,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
     globalSettings.showSolarRing = (bool)showSolarRing_tuple->value->int8;
     APP_LOG(APP_LOG_LEVEL_INFO, "Received showSolarRing: %d",
             globalSettings.showSolarRing);
-  }
-
-  if (textOutlineStyle_tuple != NULL) {
-    uint8_t style = (uint8_t)textOutlineStyle_tuple->value->int8;
-    globalSettings.textOutlineStyle =
-        style == TEXT_OUTLINE_WHITE_WITH_BLACK ? TEXT_OUTLINE_WHITE_WITH_BLACK
-                                               : TEXT_OUTLINE_BLACK_WITH_WHITE;
-    APP_LOG(APP_LOG_LEVEL_INFO, "Received textOutlineStyle: %d",
-            (int)globalSettings.textOutlineStyle);
   }
 
   if (infoLayout_tuple != NULL) {

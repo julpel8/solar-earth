@@ -8,7 +8,7 @@ var cachedWeather = null;
 var cachedSolar = null;
 var cachedSettings = null;
 
-var TIME_FORMAT_STORAGE_KEY = 'halcyonIs24h';
+var TIME_FORMAT_STORAGE_KEY = 'solarEarthIs24h';
 var DEFAULT_ALT_CITY = 'TOKYO';
 var DEFAULT_ALT_CITY2 = 'UTC';
 var ALT_LABEL_MAX_LENGTH = 6;
@@ -170,7 +170,6 @@ function getDefaultConfigSettings() {
     SETTING_ALT_LABEL2: 'UTC',
     SETTING_REGION: 0,
     SETTING_SHOW_SOLAR_RING: 0,
-    SETTING_TEXT_OUTLINE_STYLE: 0,
     SETTING_INFO_LAYOUT: DEFAULT_INFO_LAYOUT
   }, getDefaultWidgets());
 }
@@ -437,7 +436,7 @@ function locationSuccess(pos) {
     sunsetMinute: times.sunset.getHours() * 60 + times.sunset.getMinutes()
   };
   cachedSolar = solar;
-  localStorage.setItem('halcyonSolar', JSON.stringify(solar));
+  localStorage.setItem('solarEarthSolar', JSON.stringify(solar));
   console.log('Solar: sunrise=' + solar.sunriseMinute + ', sunset=' + solar.sunsetMinute);
 
   // Send to watch immediately (even before weather)
@@ -481,13 +480,13 @@ Pebble.addEventListener('ready', function (e) {
 
   // Restore cached weather/solar from previous session
   cachedWeather = Weather.restore();
-  var savedSolar = localStorage.getItem('halcyonSolar');
+  var savedSolar = localStorage.getItem('solarEarthSolar');
   if (savedSolar) {
     try { cachedSolar = JSON.parse(savedSolar); } catch (e) { }
   }
 
   // Restore settings
-  var savedSettings = localStorage.getItem('halcyonSettings');
+  var savedSettings = localStorage.getItem('solarEarthSettings');
   if (savedSettings) {
     try { cachedSettings = JSON.parse(savedSettings); } catch (e) { }
   }
@@ -562,10 +561,6 @@ function buildLocalConfigHtml(settings) {
     '<section><label class="row"><input id="ring" type="checkbox"> Show solar ring and day/night edge</label>',
     '<div class="hint">Also hides the hour pips when turned off.</div></section>',
     '<section><label for="bg">Background color</label><input id="bg" type="color"></section>',
-    '<section><label>Text style</label><div class="choice">',
-    '<label><input type="radio" name="outline" value="0"> Black text, white outline</label>',
-    '<label><input type="radio" name="outline" value="1"> White text, black outline</label>',
-    '</div></section>',
     '<section><label>Displayed info</label><div id="infoList"></div>',
     '<button id="addInfo" type="button">Add info</button>',
     '<div class="hint">Up to 5 lines including the time. The time line cannot be removed.</div></section>',
@@ -612,9 +607,6 @@ function buildLocalConfigHtml(settings) {
     '$("tempUnit").value=String(num(settings.SETTING_TEMP_UNIT,0));',
     'for(var li=0;li<languages.length;li++){var lo=document.createElement("option");lo.value=String(li);lo.textContent=languages[li];$("lang").appendChild(lo)}',
     '$("lang").value=String(num(settings.SETTING_LANGUAGE,0));',
-    'var style=String(num(settings.SETTING_TEXT_OUTLINE_STYLE,0));',
-    'var picked=document.querySelector("input[name=outline][value=\\"" + style + "\\"]");',
-    'if(picked)picked.checked=true;',
     'rows=parseLayout(settings.SETTING_INFO_LAYOUT);renderRows();',
     '$("addInfo").onclick=function(){var id=firstUnusedSlot();if(id===null||rows.length>=5)return;settings[slotKeys[id]]="{local_date}";rows.push({id:id,group:1});renderRows()};',
     '$("cancel").onclick=function(){location.href="pebblejs://close#CANCELLED"};',
@@ -622,7 +614,6 @@ function buildLocalConfigHtml(settings) {
     'saveRows();',
     'settings.SETTING_SHOW_SOLAR_RING=$("ring").checked?1:0;',
     'var bg=hex($("bg").value);settings.SETTING_BG_COLOR=bg;settings.SETTING_NIGHT_BG_COLOR=bg;',
-    'var o=document.querySelector("input[name=outline]:checked");settings.SETTING_TEXT_OUTLINE_STYLE=o?num(o.value,0):0;',
     'settings.SETTING_REGION=num($("region").value,0);',
     'settings.SETTING_TEMP_UNIT=num($("tempUnit").value,0);',
     'settings.SETTING_LANGUAGE=num($("lang").value,0);',
@@ -667,7 +658,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   configData = mergeObjects(getDefaultConfigSettings(), cachedSettings || {}, configData);
 
   // Save to localStorage for persistence
-  localStorage.setItem('halcyonSettings', JSON.stringify(configData));
+  localStorage.setItem('solarEarthSettings', JSON.stringify(configData));
   cachedSettings = configData;
 
   // Convert to proper format and send to watch

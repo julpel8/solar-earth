@@ -17,7 +17,7 @@
   },
   "pebble": {
     "displayName": "Solar Earth",
-    "uuid": "eb77c087-b268-4773-8040-7dc3ec70061b",
+    "uuid": "bda4a4f3-0887-428d-a834-4b1e548ce2f1",
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
@@ -87,7 +87,6 @@
       "SETTING_USE_PRIMARY_WIDGET_FONT",
       "SETTING_REGION",
       "SETTING_SHOW_SOLAR_RING",
-      "SETTING_TEXT_OUTLINE_STYLE",
       "SETTING_INFO_LAYOUT"
     ],
     "resources": {

@@ -57,12 +57,16 @@ static GRect get_center_frame(GRect bounds) {
 }
 
 // Globe display size: native bitmap size when the ring is shown, else scaled
-// up (preserving aspect ratio) to span the full centre frame width.
+// (preserving aspect ratio) to span the centre frame width minus a small side
+// margin so the globe never bleeds to the very edge.
+#define EARTH_SIDE_MARGIN 3
 static GSize compute_earth_display_size(GRect centerFrame) {
   GSize src = gbitmap_get_bounds(earthBitmap).size;
   if (globalSettings.showSolarRing || src.w <= 0) return src;
-  GSize displaySize = {centerFrame.size.w,
-                       (int16_t)((int32_t)centerFrame.size.w * src.h / src.w)};
+  int16_t targetW = centerFrame.size.w - 2 * EARTH_SIDE_MARGIN;
+  if (targetW < 1) targetW = centerFrame.size.w;
+  GSize displaySize = {targetW,
+                       (int16_t)((int32_t)targetW * src.h / src.w)};
   return displaySize;
 }
 
@@ -343,13 +347,12 @@ static void earth_update_timer_callback(void *data) {
 }
 
 // Draw text with a fixed halo so it stays readable over the globe.
+// Always white text with a black outline.
 static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
                                 GRect frame, GColor color) {
   (void)color;
-  bool whiteText =
-      globalSettings.textOutlineStyle == TEXT_OUTLINE_WHITE_WITH_BLACK;
-  GColor halo = whiteText ? GColorBlack : GColorWhite;
-  GColor text_color = whiteText ? GColorWhite : GColorBlack;
+  GColor halo = GColorBlack;
+  GColor text_color = GColorWhite;
   static const int dx[] = {-1, 1, 0, 0, -1, -1, 1, 1};
   static const int dy[] = {0, 0, -1, 1, -1, 1, -1, 1};
   graphics_context_set_text_color(ctx, halo);

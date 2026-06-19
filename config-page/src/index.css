@@ -1153,6 +1153,106 @@ input[type='checkbox'] {
   box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.08);
 }
 
+.widget-custom-header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.widget-help-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  width: 44px;
+  height: 54px;
+}
+
+.widget-help-button:hover {
+  color: var(--text-main);
+}
+
+.widget-help-button:focus-visible {
+  outline: none;
+  color: var(--halite-orange);
+}
+
+.widget-help-modal {
+  max-width: 460px;
+}
+
+.widget-help-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.widget-help-intro {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.widget-help-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.widget-help-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.widget-help-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.widget-help-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.widget-help-token {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--text-main);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.widget-help-example {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.widget-help-desc {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
 
 @media (max-width: 320px) {
   .widget-selector-container {

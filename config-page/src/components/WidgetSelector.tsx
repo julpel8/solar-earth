@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button, Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 import { WatchPreview } from './WatchPreview';
+import { WidgetHelpModal } from './WidgetHelpModal';
 import { useCapabilities, useConfig } from '../context/PebbleConfigContext';
 import { getWidgetOptions, WidgetOption, WIDGET_TOKENS, WidgetToken } from '../data/widgetTypes';
 import { renderPreview } from '../data/i18nPreview';
@@ -60,6 +61,10 @@ interface CustomWidgetModalProps {
     value: string;
     preview: string;
     tokens: WidgetToken[];
+    lang: number;
+    isImperial: boolean;
+    altLabel: string;
+    altLabel2: string;
     onOpenChange: (isOpen: boolean) => void;
     onChange: (value: string) => void;
 }
@@ -70,11 +75,16 @@ const CustomWidgetModal: React.FC<CustomWidgetModalProps> = ({
     value,
     preview,
     tokens,
+    lang,
+    isImperial,
+    altLabel,
+    altLabel2,
     onOpenChange,
     onChange,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
     const inputId = React.useId();
+    const [isHelpOpen, setIsHelpOpen] = React.useState(false);
     const tokenGroups = React.useMemo(() => groupTokens(tokens), [tokens]);
 
     React.useEffect(() => {
@@ -118,9 +128,20 @@ const CustomWidgetModal: React.FC<CustomWidgetModalProps> = ({
                         <>
                             <div className="halite-color-modal-header">
                                 <Heading slot="title">{label}</Heading>
-                                <Button className="halite-color-modal-close" onPress={close}>
-                                    ×
-                                </Button>
+                                <div className="widget-custom-header-actions">
+                                    <Button
+                                        className="widget-help-button"
+                                        onPress={() => setIsHelpOpen(true)}
+                                        aria-label="What variables can I use?"
+                                    >
+                                        <svg aria-hidden="true" height="20" viewBox="0 -960 960 960" width="20" fill="currentColor">
+                                            <path d="M478-240q21 0 35.5-14.5T528-290q0-21-14.5-35.5T478-340q-21 0-35.5 14.5T428-290q0 21 14.5 35.5T478-240Zm-36-154h74q0-33 7.5-52t42.5-52q26-26 41-49.5t15-56.5q0-56-41-86t-97-30q-57 0-92.5 30T342-618l66 26q5-18 22.5-39t53.5-21q32 0 48 17.5t16 38.5q0 20-12 37.5T506-526q-44 39-54 59t-10 73Zm38 314q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z" />
+                                        </svg>
+                                    </Button>
+                                    <Button className="halite-color-modal-close" onPress={close}>
+                                        ×
+                                    </Button>
+                                </div>
                             </div>
                             <div className="widget-custom-modal-content">
                                 <div className="widget-custom-preview" aria-live="polite">
@@ -166,6 +187,15 @@ const CustomWidgetModal: React.FC<CustomWidgetModalProps> = ({
                                     </Button>
                                 </div>
                             </div>
+                            <WidgetHelpModal
+                                isOpen={isHelpOpen}
+                                tokens={tokens}
+                                lang={lang}
+                                isImperial={isImperial}
+                                altLabel={altLabel}
+                                altLabel2={altLabel2}
+                                onOpenChange={setIsHelpOpen}
+                            />
                         </>
                     )}
                 </Dialog>
@@ -277,6 +307,10 @@ const WidgetSlotControl: React.FC<WidgetSlotControlProps> = ({
                         value={value}
                         preview={preview}
                         tokens={tokens}
+                        lang={lang}
+                        isImperial={isImperial}
+                        altLabel={altLabel}
+                        altLabel2={altLabel2}
                         onOpenChange={setIsEditorOpen}
                         onChange={updateCustomValue}
                     />

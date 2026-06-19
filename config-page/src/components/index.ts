@@ -8,6 +8,7 @@ export * from './TextInput';
 export * from './AltTimezoneSection';
 export * from './ThemePicker';
 export * from './WidgetSelector';
+export * from './WidgetHelpModal';
 export * from './WatchPreview';
 export * from './CustomThemePanel';
 export * from './ImportThemeModal';

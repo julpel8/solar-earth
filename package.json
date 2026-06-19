@@ -1,8 +1,8 @@
 {
   "name": "solar-earth-pebble",
   "author": "julpel8",
-  "description": "Inspired by Freakified (Halcyon) and Joshua Simmons (Blue Pebble). A Pebble watchface showing a day/night globe with the time and configurable info lines. Globe day/night shading inspired by Joshua Simmons' Blue Pebble; clock layout, solar ring and widgets inspired by Freakified's Halcyon.",
-  "version": "0.0.4",
+  "description": "A Pebble watchface showing a day/night globe behind the time. The terminator follows the real position of the sun, and the night side shows city lights after dark. Center the globe on your region and configure the info lines (date, weather, sunrise/sunset, steps, a second time zone…). Globe day/night shading inspired by Joshua Simmons' Blue Pebble; clock layout and widgets inspired by Freakified's Halcyon.",
+  "version": "0.0.5",
   "license": "MIT",
   "keywords": [
     "pebble-watchface",
@@ -101,84 +101,84 @@
           "name": "BLUE_MARBLE_EUROPE",
           "file": "images/blue_marble_europe.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLACK_MARBLE_EUROPE",
           "file": "images/black_marble_europe.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLUE_MARBLE_AFRICA",
           "file": "images/blue_marble_africa.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLACK_MARBLE_AFRICA",
           "file": "images/black_marble_africa.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLUE_MARBLE_NAMERICA",
           "file": "images/blue_marble_namerica.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLACK_MARBLE_NAMERICA",
           "file": "images/black_marble_namerica.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLUE_MARBLE_SAMERICA",
           "file": "images/blue_marble_samerica.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLACK_MARBLE_SAMERICA",
           "file": "images/black_marble_samerica.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLUE_MARBLE_ASIA",
           "file": "images/blue_marble_asia.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLACK_MARBLE_ASIA",
           "file": "images/black_marble_asia.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLUE_MARBLE_OCEANIA",
           "file": "images/blue_marble_oceania.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         },
         {
           "type": "bitmap",
           "name": "BLACK_MARBLE_OCEANIA",
           "file": "images/black_marble_oceania.png",
           "memoryFormat": "4BitPalette",
-          "spaceOptimization": "memory"
+          "spaceOptimization": "storage"
         }
       ]
     }

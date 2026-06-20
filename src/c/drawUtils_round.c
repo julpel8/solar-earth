@@ -2,7 +2,6 @@
 
 #include "drawUtils.h"
 #include "settings.h"
-#include "solarUtils.h"
 #include "utils.h"
 
 static ColorTheme currentTheme;

@@ -1,7 +1,6 @@
 #include "info_layout.h"
 #include "fonts.h"
 #include "settings.h"
-#include "solarUtils.h"
 #include "text_metrics.h"
 #include "utils.h"
 #include "widgets.h"
@@ -247,23 +246,12 @@ static void draw_slot_group(GContext *ctx, SlotDescriptor *slots, int count,
 void info_layout_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
 
-  bool useNightColors = false;
-  if (globalSettings.useNightTheme) {
-    struct tm *timeInfo = getCurrentTime();
-    int currentMinutes = timeInfo->tm_hour * 60 + timeInfo->tm_min;
-    useNightColors = isNightTime(currentMinutes);
-  }
-
   // Fonts are chosen per line from each entry's size (see info_font_for_size /
   // time_font_for_size); only the colours are decided up front.
   // ---- Color selection ----
-  GColor timeColor =
-      useNightColors ? globalSettings.nightTimeColor : globalSettings.timeColor;
-  GColor primaryColor = useNightColors ? globalSettings.nightSubtextPrimaryColor
-                                       : globalSettings.subtextPrimaryColor;
-  GColor secondaryColor = useNightColors
-                              ? globalSettings.nightSubtextSecondaryColor
-                              : globalSettings.subtextSecondaryColor;
+  GColor timeColor = globalSettings.timeColor;
+  GColor primaryColor = globalSettings.subtextPrimaryColor;
+  GColor secondaryColor = globalSettings.subtextSecondaryColor;
 
   // ---- Build ordered slot list from the configurable layout ----
 #define MAX_SLOTS INFO_SLOT_COUNT

@@ -191,13 +191,8 @@ function getDefaultConfigSettings() {
     SETTING_SUBTEXT_PRIMARY_COLOR: '000000',
     SETTING_SUBTEXT_SECONDARY_COLOR: '555555',
     SETTING_BG_COLOR: '000000',
-    SETTING_NIGHT_TIME_COLOR: 'FFFFFF',
-    SETTING_NIGHT_SUBTEXT_PRIMARY_COLOR: 'FFFFFF',
-    SETTING_NIGHT_SUBTEXT_SECONDARY_COLOR: 'AAAAFF',
-    SETTING_NIGHT_BG_COLOR: '000000',
     SETTING_USE_LARGE_FONTS: 0,
     SETTING_USE_PRIMARY_WIDGET_FONT: 0,
-    SETTING_USE_NIGHT_THEME: 1,
     SETTING_SHOW_LEADING_ZERO: 0,
     SETTING_TIME_FORMAT: 0,
     SETTING_EARTH_UPDATE_INTERVAL: 5,
@@ -415,12 +410,6 @@ function sendDataToWatch() {
     'SETTING_ALT_CITY_LABEL', 'ALT_CITY_UTC_OFFSET', DEFAULT_ALT_CITY);
   applyAltCityMessage(msg, settings, 'SETTING_ALT_CITY2', 'SETTING_ALT_LABEL2',
     'SETTING_ALT_CITY2_LABEL', 'ALT_CITY2_UTC_OFFSET', DEFAULT_ALT_CITY2);
-
-  // Send solar minutes for the ring
-  if (cachedSolar) {
-    msg['WEATHER_SUNRISE_MINUTE'] = cachedSolar.sunriseMinute;
-    msg['WEATHER_SUNSET_MINUTE'] = cachedSolar.sunsetMinute;
-  }
 
   // Send temp unit setting
   msg['SETTING_TEMP_UNIT'] = isImperial ? 1 : 0;
@@ -689,7 +678,7 @@ function buildLocalConfigHtml(settings) {
     'function makeCard(idx,pos,len){var row=rows[idx];var card=document.createElement("div");card.className="info-row";var grid=document.createElement("div");grid.className="info-grid";var info=document.createElement("select");var fmt=document.createElement("input");fmt.type="text";fmt.className="fmt";fmt.maxLength=47;if(row.id===2){var t=document.createElement("option");t.value="time";t.textContent="Time";info.appendChild(t);info.disabled=true;fmt.value="Time";fmt.disabled=true}else{var key=slotKeys[row.id];fmt.value=clampText(settings[key]);fillSelect(info,settings[key]);info.onchange=function(){if(info.value!=="__custom__"){fmt.value=info.value;settings[key]=fmt.value}else{fmt.focus()}};fmt.oninput=function(){settings[key]=clampText(fmt.value);info.value=optionValueFor(settings[key])}}var grp=groupSelect(row.group);grp.onchange=function(){row.group=num(grp.value,1);renderRows()};var szl=sizeSelect(row.size);szl.onchange=function(){row.size=num(szl.value,1)};grid.appendChild(info);grid.appendChild(grp);grid.appendChild(szl);card.appendChild(grid);card.appendChild(fmt);var acts=document.createElement("div");acts.className="info-actions";var up=document.createElement("button");up.type="button";up.textContent="Up";up.disabled=pos===0;up.onclick=function(){moveWithin(idx,-1)};var down=document.createElement("button");down.type="button";down.textContent="Down";down.disabled=pos===len-1;down.onclick=function(){moveWithin(idx,1)};var del=document.createElement("button");del.type="button";del.textContent="Delete";del.disabled=row.id===2;del.onclick=function(){if(row.id!==2){settings[slotKeys[row.id]]="";rows.splice(idx,1);renderRows()}};acts.appendChild(up);acts.appendChild(down);acts.appendChild(del);card.appendChild(acts);return card}',
     'function renderRows(){var list=$("infoList");list.innerHTML="";var groups=[[0,"Top"],[1,"Center"],[2,"Bottom"]];for(var gi=0;gi<groups.length;gi++){var g=groups[gi][0];var sec=document.createElement("div");sec.className="info-group";var h=document.createElement("div");h.className="group-title";h.textContent=groups[gi][1];sec.appendChild(h);var order=groupIndices(g);if(order.length===0){var em=document.createElement("div");em.className="hint";em.textContent="\\u2014";sec.appendChild(em)}for(var k=0;k<order.length;k++){sec.appendChild(makeCard(order[k],k,order.length))}list.appendChild(sec)}$("addInfo").disabled=rows.length>=5||firstUnusedSlot()===null}',
     'function saveRows(){var active={};var parts=[];for(var i=0;i<rows.length;i++){var r=rows[i];if(r.id===2){parts.push("2:"+num(r.group,1)+":"+num(r.size,1));continue}var key=slotKeys[r.id];settings[key]=clampText(settings[key]);if(settings[key]){active[r.id]=1;parts.push(r.id+":"+num(r.group,1)+":"+num(r.size,1))}}for(var j=0;j<optionalIds.length;j++){if(!active[optionalIds[j]])settings[slotKeys[optionalIds[j]]]="";}settings.SETTING_INFO_LAYOUT=parts.slice(0,5).join(",")}',
-    '$("bg").value="#"+hex(settings.SETTING_BG_COLOR||settings.SETTING_NIGHT_BG_COLOR);',
+    '$("bg").value="#"+hex(settings.SETTING_BG_COLOR);',
     '$("region").value=String(num(settings.SETTING_REGION,0));',
     '$("tempUnit").value=String(num(settings.SETTING_TEMP_UNIT,0));',
     '$("timeFormat").value=String(num(settings.SETTING_TIME_FORMAT,0));',
@@ -707,7 +696,7 @@ function buildLocalConfigHtml(settings) {
     '$("cancel").onclick=function(){location.href="pebblejs://close#CANCELLED"};',
     '$("save").onclick=function(){',
     'saveRows();',
-    'var bg=hex($("bg").value);settings.SETTING_BG_COLOR=bg;settings.SETTING_NIGHT_BG_COLOR=bg;',
+    'var bg=hex($("bg").value);settings.SETTING_BG_COLOR=bg;',
     'settings.SETTING_REGION=num($("region").value,0);',
     'settings.SETTING_TEMP_UNIT=num($("tempUnit").value,0);',
     'settings.SETTING_TIME_FORMAT=num($("timeFormat").value,0);',
@@ -762,9 +751,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
 
   var colorKeys = [
     'SETTING_TIME_COLOR', 'SETTING_BG_COLOR',
-    'SETTING_SUBTEXT_PRIMARY_COLOR', 'SETTING_SUBTEXT_SECONDARY_COLOR',
-    'SETTING_NIGHT_TIME_COLOR', 'SETTING_NIGHT_BG_COLOR',
-    'SETTING_NIGHT_SUBTEXT_PRIMARY_COLOR', 'SETTING_NIGHT_SUBTEXT_SECONDARY_COLOR'
+    'SETTING_SUBTEXT_PRIMARY_COLOR', 'SETTING_SUBTEXT_SECONDARY_COLOR'
   ];
 
   // Widget string keys — these get Pass 1 applied instead of raw send

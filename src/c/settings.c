@@ -1,5 +1,4 @@
 #include "settings.h"
-#include "solarUtils.h"
 #include "utils.h"
 #include "widgets.h"
 #include <pebble.h>
@@ -8,42 +7,41 @@ Settings globalSettings;
 
 // ---------------------------------------------------------------------------
 // Per-field persist keys. Each setting owns its own key, so adding or removing
-// a field never disturbs the others — no positional blob, no migrations.
-// Numbered from 100 to stay clear of the legacy/solar keys (1, 2, 3, 51).
+// a field never disturbs the others. Numbered from 100 to stay clear of the
+// legacy keys (1, 2, 3) and the solar key (51). Keys 104-108 are permanently
+// reserved (former night-theme keys, removed) so the remaining keys keep their
+// numbers for users already on the keyed format.
 // ---------------------------------------------------------------------------
 enum {
   PK_TIME_COLOR = 100,
-  PK_SUBTEXT_PRIMARY_COLOR,
-  PK_SUBTEXT_SECONDARY_COLOR,
-  PK_BG_COLOR,
-  PK_NIGHT_TIME_COLOR,
-  PK_NIGHT_SUBTEXT_PRIMARY_COLOR,
-  PK_NIGHT_SUBTEXT_SECONDARY_COLOR,
-  PK_NIGHT_BG_COLOR,
-  PK_USE_NIGHT_THEME,
-  PK_USE_LARGE_FONTS,
-  PK_SHOW_LEADING_ZERO,
-  PK_USE_PRIMARY_FONT,
-  PK_TEMP_UNIT,
-  PK_LANGUAGE,
-  PK_TIME_FORMAT,
-  PK_REGION,
-  PK_EARTH_UPDATE_INTERVAL,
-  PK_ALT_CITY_LABEL,
-  PK_ALT_CITY_UTC_OFFSET,
-  PK_ALT_CITY2_LABEL,
-  PK_ALT_CITY2_UTC_OFFSET,
-  PK_INFO_LAYOUT,
-  PK_WIDGET_UPPER_SECONDARY,
-  PK_WIDGET_UPPER_PRIMARY,
-  PK_WIDGET_LOWER_PRIMARY,
-  PK_WIDGET_LOWER_SECONDARY,
+  PK_SUBTEXT_PRIMARY_COLOR,        // 101
+  PK_SUBTEXT_SECONDARY_COLOR,      // 102
+  PK_BG_COLOR,                     // 103
+  // 104-108 reserved (former SETTING_NIGHT_* / USE_NIGHT_THEME)
+  PK_USE_LARGE_FONTS = 109,
+  PK_SHOW_LEADING_ZERO,            // 110
+  PK_USE_PRIMARY_FONT,             // 111
+  PK_TEMP_UNIT,                    // 112
+  PK_LANGUAGE,                     // 113
+  PK_TIME_FORMAT,                  // 114
+  PK_REGION,                       // 115
+  PK_EARTH_UPDATE_INTERVAL,        // 116
+  PK_ALT_CITY_LABEL,               // 117
+  PK_ALT_CITY_UTC_OFFSET,          // 118
+  PK_ALT_CITY2_LABEL,              // 119
+  PK_ALT_CITY2_UTC_OFFSET,         // 120
+  PK_INFO_LAYOUT,                  // 121
+  PK_WIDGET_UPPER_SECONDARY,       // 122
+  PK_WIDGET_UPPER_PRIMARY,         // 123
+  PK_WIDGET_LOWER_PRIMARY,         // 124
+  PK_WIDGET_LOWER_SECONDARY,       // 125
 };
 
 // ---------------------------------------------------------------------------
 // Legacy positional blobs (format <= v10). Read once during migration, then the
 // old keys are deleted. The layout MUST match exactly what older builds wrote,
-// including the now-dead ring/sun/pip fields, so the byte offsets line up.
+// including the now-dead ring/sun/pip and night-theme fields, so the byte
+// offsets line up. We simply don't copy the dead fields out.
 // ---------------------------------------------------------------------------
 typedef enum { LEGACY_PIP_ALL = 0, LEGACY_PIP_MAJOR = 1, LEGACY_PIP_HIDDEN = 2 }
     LegacyPipVisibilityType;
@@ -142,13 +140,6 @@ static void set_defaults(void) {
   globalSettings.subtextSecondaryColor = DEFAULT_SUBTEXT_SECONDARY_COLOR;
   globalSettings.bgColor = DEFAULT_BG_COLOR;
 
-  globalSettings.nightTimeColor = DEFAULT_NIGHT_TIME_COLOR;
-  globalSettings.nightSubtextPrimaryColor = DEFAULT_NIGHT_SUBTEXT_PRIMARY_COLOR;
-  globalSettings.nightSubtextSecondaryColor =
-      DEFAULT_NIGHT_SUBTEXT_SECONDARY_COLOR;
-  globalSettings.nightBgColor = DEFAULT_NIGHT_BG_COLOR;
-
-  globalSettings.useNightTheme = true;
   globalSettings.useLargeFonts = false;
   globalSettings.showLeadingZero = false;
   globalSettings.usePrimaryFontForAllWidgets = false;
@@ -190,17 +181,6 @@ static void load_from_keys(void) {
       PK_SUBTEXT_SECONDARY_COLOR, globalSettings.subtextSecondaryColor);
   globalSettings.bgColor = persist_get_color(PK_BG_COLOR, globalSettings.bgColor);
 
-  globalSettings.nightTimeColor =
-      persist_get_color(PK_NIGHT_TIME_COLOR, globalSettings.nightTimeColor);
-  globalSettings.nightSubtextPrimaryColor = persist_get_color(
-      PK_NIGHT_SUBTEXT_PRIMARY_COLOR, globalSettings.nightSubtextPrimaryColor);
-  globalSettings.nightSubtextSecondaryColor = persist_get_color(
-      PK_NIGHT_SUBTEXT_SECONDARY_COLOR, globalSettings.nightSubtextSecondaryColor);
-  globalSettings.nightBgColor =
-      persist_get_color(PK_NIGHT_BG_COLOR, globalSettings.nightBgColor);
-
-  globalSettings.useNightTheme =
-      persist_get_bool(PK_USE_NIGHT_THEME, globalSettings.useNightTheme);
   globalSettings.useLargeFonts =
       persist_get_bool(PK_USE_LARGE_FONTS, globalSettings.useLargeFonts);
   globalSettings.showLeadingZero =
@@ -241,7 +221,7 @@ static void load_from_keys(void) {
 
 // One-time import of the old positional blob into globalSettings. globalSettings
 // already holds the defaults, so any field missing from a short legacy blob
-// keeps its default.
+// keeps its default. Dead fields (ring/sun/pip, night theme) are not copied out.
 static void migrate_from_legacy(void) {
   if (persist_exists(LEGACY_SETTINGS_PERSIST_KEY)) {
     LegacyStoredSettings ls;
@@ -255,11 +235,6 @@ static void migrate_from_legacy(void) {
       globalSettings.subtextPrimaryColor = ls.subtextPrimaryColor;
       globalSettings.subtextSecondaryColor = ls.subtextSecondaryColor;
       globalSettings.bgColor = ls.bgColor;
-      globalSettings.nightTimeColor = ls.nightTimeColor;
-      globalSettings.nightSubtextPrimaryColor = ls.nightSubtextPrimaryColor;
-      globalSettings.nightSubtextSecondaryColor = ls.nightSubtextSecondaryColor;
-      globalSettings.nightBgColor = ls.nightBgColor;
-      globalSettings.useNightTheme = ls.useNightTheme;
       globalSettings.useLargeFonts = ls.useLargeFonts;
       globalSettings.showLeadingZero = ls.showLeadingZero;
       globalSettings.tempUnit = ls.tempUnit;
@@ -343,14 +318,7 @@ void Settings_saveToStorage() {
   persist_put_color(PK_SUBTEXT_SECONDARY_COLOR,
                     globalSettings.subtextSecondaryColor);
   persist_put_color(PK_BG_COLOR, globalSettings.bgColor);
-  persist_put_color(PK_NIGHT_TIME_COLOR, globalSettings.nightTimeColor);
-  persist_put_color(PK_NIGHT_SUBTEXT_PRIMARY_COLOR,
-                    globalSettings.nightSubtextPrimaryColor);
-  persist_put_color(PK_NIGHT_SUBTEXT_SECONDARY_COLOR,
-                    globalSettings.nightSubtextSecondaryColor);
-  persist_put_color(PK_NIGHT_BG_COLOR, globalSettings.nightBgColor);
 
-  persist_write_bool(PK_USE_NIGHT_THEME, globalSettings.useNightTheme);
   persist_write_bool(PK_USE_LARGE_FONTS, globalSettings.useLargeFonts);
   persist_write_bool(PK_SHOW_LEADING_ZERO, globalSettings.showLeadingZero);
   persist_write_bool(PK_USE_PRIMARY_FONT,
@@ -436,23 +404,9 @@ uint16_t settings_earth_update_seconds(void) {
 
 ColorTheme getCurrentColorTheme() {
   ColorTheme theme;
-
-  struct tm *timeInfo = getCurrentTime();
-  int currentMinutes = timeInfo->tm_hour * 60 + timeInfo->tm_min;
-
-  bool useNight = globalSettings.useNightTheme && isNightTime(currentMinutes);
-
-  if (useNight) {
-    theme.timeColor = globalSettings.nightTimeColor;
-    theme.subtextPrimaryColor = globalSettings.nightSubtextPrimaryColor;
-    theme.subtextSecondaryColor = globalSettings.nightSubtextSecondaryColor;
-    theme.bgColor = globalSettings.nightBgColor;
-  } else {
-    theme.timeColor = globalSettings.timeColor;
-    theme.subtextPrimaryColor = globalSettings.subtextPrimaryColor;
-    theme.subtextSecondaryColor = globalSettings.subtextSecondaryColor;
-    theme.bgColor = globalSettings.bgColor;
-  }
-
+  theme.timeColor = globalSettings.timeColor;
+  theme.subtextPrimaryColor = globalSettings.subtextPrimaryColor;
+  theme.subtextSecondaryColor = globalSettings.subtextSecondaryColor;
+  theme.bgColor = globalSettings.bgColor;
   return theme;
 }

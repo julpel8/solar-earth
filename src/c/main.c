@@ -7,7 +7,6 @@
 #include "info_layout.h"
 #include "messaging.h"
 #include "settings.h"
-#include "solarUtils.h"
 #include "utils.h"
 
 // Long enough for "12:30 PM" plus the null terminator.
@@ -94,12 +93,6 @@ static void update_clock() {
   window_set_background_color(mainWindow, currentTheme.bgColor);
   earth_render_set_bg(currentTheme.bgColor);
 
-  // if sunrise/sunset has not yet been calculated, do that
-  if (currentSolarInfo.sunriseMinute == DEFAULT_SUNRISE_TIME &&
-      currentSolarInfo.sunsetMinute == DEFAULT_SUNSET_TIME) {
-    solarUtils_recalculateSolarData();
-  }
-
   // Recompute the globe day/night shading off the startup path. The trigonometry
   // is too expensive to run synchronously on the UI thread at launch.
   earth_render_maybe_update(now);
@@ -109,8 +102,6 @@ static void update_clock() {
 
 // settings might have changed, so recalculate solar data and refresh screen
 void onSettingsChanged() {
-  solarUtils_recalculateSolarData();
-
   bool regionChanged = earth_render_set_region(globalSettings.region);
 
   earth_render_set_bg(getCurrentColorTheme().bgColor);
@@ -232,9 +223,6 @@ static void init() {
 
   // load those settings
   Settings_init();
-
-  // init solar stuff
-  solarUtils_init();
 
   // init the messaging thing
   messaging_init(onSettingsChanged, on_request_failed);

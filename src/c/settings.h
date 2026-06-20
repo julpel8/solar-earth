@@ -33,23 +33,11 @@
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorDarkGray
 #define DEFAULT_BG_COLOR GColorBlack
-
-// night theme defaults
-#define DEFAULT_NIGHT_TIME_COLOR GColorFromHEX(0xFFFFFF)
-#define DEFAULT_NIGHT_SUBTEXT_PRIMARY_COLOR GColorFromHEX(0xFFFFFF)
-#define DEFAULT_NIGHT_SUBTEXT_SECONDARY_COLOR GColorFromHEX(0xAAAAFF)
-#define DEFAULT_NIGHT_BG_COLOR GColorBlack
 #else
 #define DEFAULT_TIME_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorBlack
 #define DEFAULT_BG_COLOR GColorBlack
-
-// night theme defaults
-#define DEFAULT_NIGHT_TIME_COLOR GColorWhite
-#define DEFAULT_NIGHT_SUBTEXT_PRIMARY_COLOR GColorWhite
-#define DEFAULT_NIGHT_SUBTEXT_SECONDARY_COLOR GColorWhite
-#define DEFAULT_NIGHT_BG_COLOR GColorBlack
 #endif
 
 typedef enum { TEMP_UNIT_CELSIUS = 0, TEMP_UNIT_FAHRENHEIT = 1 } TempUnitType;
@@ -61,7 +49,7 @@ typedef enum {
   TIME_FORMAT_12H_AMPM = 3   // force 12-hour with AM/PM suffix on the main time
 } TimeFormatType;
 
-// Color theme struct containing the resolved (day or night) color fields.
+// Color theme struct containing the resolved color fields.
 typedef struct {
   GColor timeColor;
   GColor subtextPrimaryColor;
@@ -78,13 +66,6 @@ typedef struct {
   GColor subtextSecondaryColor;
   GColor bgColor;
 
-  // night theme colors
-  GColor nightTimeColor;
-  GColor nightSubtextPrimaryColor;
-  GColor nightSubtextSecondaryColor;
-  GColor nightBgColor;
-
-  bool useNightTheme;
   bool useLargeFonts;
   bool showLeadingZero;
   bool usePrimaryFontForAllWidgets;

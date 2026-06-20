@@ -1,7 +1,6 @@
 #include "messaging.h"
 #include "earth.h"
 #include "settings.h"
-#include "solarUtils.h"
 #include <pebble.h>
 
 void (*message_processed_callback)(void);
@@ -37,19 +36,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
       dict_find(iterator, MESSAGE_KEY_SETTING_SUBTEXT_SECONDARY_COLOR);
   Tuple *bgColor_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_BG_COLOR);
 
-  // night theme colors
-  Tuple *nightTimeColor_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_NIGHT_TIME_COLOR);
-  Tuple *nightSubTextPrimaryColor_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_NIGHT_SUBTEXT_PRIMARY_COLOR);
-  Tuple *nightSubTextSecondaryColor_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_NIGHT_SUBTEXT_SECONDARY_COLOR);
-  Tuple *nightBgColor_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_NIGHT_BG_COLOR);
-
-  Tuple *useNightTheme_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_USE_NIGHT_THEME);
-
   Tuple *useLargeFonts_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_USE_LARGE_FONTS);
 
@@ -74,10 +60,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   Tuple *widgetLowerSecondary_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_WIDGET_LOWER_SECONDARY);
 
-  Tuple *weatherSunriseMinute_tuple =
-      dict_find(iterator, MESSAGE_KEY_WEATHER_SUNRISE_MINUTE);
-  Tuple *weatherSunsetMinute_tuple =
-      dict_find(iterator, MESSAGE_KEY_WEATHER_SUNSET_MINUTE);
   Tuple *tempUnit_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_TEMP_UNIT);
   Tuple *language_tuple =
@@ -113,27 +95,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
     globalSettings.bgColor = GColorFromHEX(bgColor_tuple->value->int32);
   }
 
-  // night theme colors
-  if (nightTimeColor_tuple != NULL) {
-    globalSettings.nightTimeColor =
-        GColorFromHEX(nightTimeColor_tuple->value->int32);
-  }
-
-  if (nightSubTextPrimaryColor_tuple != NULL) {
-    globalSettings.nightSubtextPrimaryColor =
-        GColorFromHEX(nightSubTextPrimaryColor_tuple->value->int32);
-  }
-
-  if (nightSubTextSecondaryColor_tuple != NULL) {
-    globalSettings.nightSubtextSecondaryColor =
-        GColorFromHEX(nightSubTextSecondaryColor_tuple->value->int32);
-  }
-
-  if (nightBgColor_tuple != NULL) {
-    globalSettings.nightBgColor =
-        GColorFromHEX(nightBgColor_tuple->value->int32);
-  }
-
   if (useLargeFonts_tuple != NULL) {
     globalSettings.useLargeFonts = (bool)useLargeFonts_tuple->value->int8;
   }
@@ -141,10 +102,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   if (usePrimaryFontForAllWidgets_tuple != NULL) {
     globalSettings.usePrimaryFontForAllWidgets =
         (bool)usePrimaryFontForAllWidgets_tuple->value->int8;
-  }
-
-  if (useNightTheme_tuple != NULL) {
-    globalSettings.useNightTheme = (bool)useNightTheme_tuple->value->int8;
   }
 
   if (showLeadingZero_tuple != NULL) {
@@ -192,16 +149,6 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
     strncpy(globalSettings.widgetLowerSecondary,
             widgetLowerSecondary_tuple->value->cstring, WIDGET_TEXT_LEN);
     globalSettings.widgetLowerSecondary[WIDGET_TEXT_LEN - 1] = '\0';
-  }
-
-  if (weatherSunriseMinute_tuple != NULL) {
-    solarUtils_setSolarMinutes((int)weatherSunriseMinute_tuple->value->int32,
-                               currentSolarInfo.sunsetMinute);
-  }
-
-  if (weatherSunsetMinute_tuple != NULL) {
-    solarUtils_setSolarMinutes(currentSolarInfo.sunriseMinute,
-                               (int)weatherSunsetMinute_tuple->value->int32);
   }
 
   if (tempUnit_tuple != NULL) {

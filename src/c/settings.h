@@ -3,17 +3,21 @@
 #include <pebble.h>
 #include <sys/syslimits.h>
 
-#define CURRENT_SETTINGS_VERSION 10
+// Settings are persisted with one persist key per field (see settings.c). The
+// version key records the storage format; v11 is the first keyed format and is
+// migrated to once from the older positional blob (LEGACY_* keys).
+#define CURRENT_SETTINGS_VERSION 11
 #define SETTINGS_VERSION_PERSIST_KEY 1
-#define SETTINGS_PERSIST_KEY 2
-#define SETTINGS_EXTRA_PERSIST_KEY 3
+// Legacy positional blobs (pre-v11), read once during migration then deleted.
+#define LEGACY_SETTINGS_PERSIST_KEY 2
+#define LEGACY_SETTINGS_EXTRA_PERSIST_KEY 3
+
 #define ALT_CITY_LABEL_LEN 20
 // Each info-layout entry is "id:group:size" (e.g. "2:1:1"); five entries plus
 // commas need 30 bytes, so allow a little headroom.
 #define INFO_LAYOUT_LEN 32
-// id:group:size per line. size 0/1/2 = S/M/L. These defaults reproduce the
-// previous look: secondary lines (0,4) small, primary lines (1,3) and the time
-// (2) medium.
+// id:group:size per line. size 0/1/2 = S/M/L. Secondary lines (0,4) small,
+// primary lines (1,3) and the time (2) medium.
 #define DEFAULT_INFO_LAYOUT "0:0:0,1:0:1,2:1:1,3:2:1,4:2:0"
 
 // Per-line text size (S/M/L). Stored as the third field of each info-layout
@@ -29,68 +33,24 @@
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorDarkGray
 #define DEFAULT_BG_COLOR GColorBlack
-#define DEFAULT_PIP_COLOR_PRIMARY GColorBlack
-#define DEFAULT_PIP_COLOR_SECONDARY GColorLightGray
-#define DEFAULT_RING_STROKE_COLOR GColorBlack
-#define DEFAULT_RING_NIGHT_COLOR GColorCobaltBlue
-#define DEFAULT_RING_DAY_COLOR GColorVividCerulean
-#define DEFAULT_RING_SUNRISE_COLOR GColorMelon
-#define DEFAULT_RING_SUNSET_COLOR GColorChromeYellow
-#define DEFAULT_SUN_STROKE_COLOR GColorBlack
-#define DEFAULT_SUN_FILL_COLOR GColorYellow
 
 // night theme defaults
 #define DEFAULT_NIGHT_TIME_COLOR GColorFromHEX(0xFFFFFF)
 #define DEFAULT_NIGHT_SUBTEXT_PRIMARY_COLOR GColorFromHEX(0xFFFFFF)
 #define DEFAULT_NIGHT_SUBTEXT_SECONDARY_COLOR GColorFromHEX(0xAAAAFF)
 #define DEFAULT_NIGHT_BG_COLOR GColorBlack
-#define DEFAULT_NIGHT_PIP_COLOR_PRIMARY GColorFromHEX(0xFFFFFF)
-#define DEFAULT_NIGHT_PIP_COLOR_SECONDARY GColorFromHEX(0x0055AA)
-#define DEFAULT_NIGHT_RING_STROKE_COLOR GColorBlack
-#define DEFAULT_NIGHT_RING_NIGHT_COLOR GColorFromHEX(0x0000AA)
-#define DEFAULT_NIGHT_RING_DAY_COLOR GColorFromHEX(0x00AAFF)
-#define DEFAULT_NIGHT_RING_SUNRISE_COLOR GColorFromHEX(0x0055FF)
-#define DEFAULT_NIGHT_RING_SUNSET_COLOR GColorFromHEX(0x0055FF)
-#define DEFAULT_NIGHT_SUN_STROKE_COLOR GColorBlack
-#define DEFAULT_NIGHT_SUN_FILL_COLOR GColorFromHEX(0xFFFFFF)
 #else
 #define DEFAULT_TIME_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
 #define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorBlack
 #define DEFAULT_BG_COLOR GColorBlack
-#define DEFAULT_PIP_COLOR_PRIMARY GColorBlack
-#define DEFAULT_PIP_COLOR_SECONDARY GColorBlack
-#define DEFAULT_RING_STROKE_COLOR GColorBlack
-#define DEFAULT_RING_NIGHT_COLOR GColorBlack
-#define DEFAULT_RING_DAY_COLOR GColorWhite
-#define DEFAULT_RING_SUNRISE_COLOR GColorLightGray
-#define DEFAULT_RING_SUNSET_COLOR GColorLightGray
-#define DEFAULT_SUN_STROKE_COLOR GColorBlack
-#define DEFAULT_SUN_FILL_COLOR GColorWhite
 
 // night theme defaults
 #define DEFAULT_NIGHT_TIME_COLOR GColorWhite
 #define DEFAULT_NIGHT_SUBTEXT_PRIMARY_COLOR GColorWhite
 #define DEFAULT_NIGHT_SUBTEXT_SECONDARY_COLOR GColorWhite
 #define DEFAULT_NIGHT_BG_COLOR GColorBlack
-#define DEFAULT_NIGHT_PIP_COLOR_PRIMARY GColorWhite
-#define DEFAULT_NIGHT_PIP_COLOR_SECONDARY GColorWhite
-#define DEFAULT_NIGHT_RING_STROKE_COLOR GColorBlack
-#define DEFAULT_NIGHT_RING_NIGHT_COLOR GColorBlack
-#define DEFAULT_NIGHT_RING_DAY_COLOR GColorWhite
-#define DEFAULT_NIGHT_RING_SUNRISE_COLOR GColorLightGray
-#define DEFAULT_NIGHT_RING_SUNSET_COLOR GColorLightGray
-#define DEFAULT_NIGHT_SUN_STROKE_COLOR GColorBlack
-#define DEFAULT_NIGHT_SUN_FILL_COLOR GColorWhite
 #endif
-
-// default settings, black and white
-
-typedef enum {
-  PIP_SHOW_ALL = 0,
-  PIP_SHOW_MAJOR = 1,
-  PIP_HIDDEN = 2
-} PipVisibilityType;
 
 typedef enum { TEMP_UNIT_CELSIUS = 0, TEMP_UNIT_FAHRENHEIT = 1 } TempUnitType;
 
@@ -101,68 +61,36 @@ typedef enum {
   TIME_FORMAT_12H_AMPM = 3   // force 12-hour with AM/PM suffix on the main time
 } TimeFormatType;
 
-// typedef enum {
-//   NO_VIBE = 0,
-//   VIBE_EVERY_HOUR = 1,
-//   VIBE_EVERY_HALF_HOUR = 2
-// } VibeIntervalType;
-
-// Color theme struct containing just the color fields
+// Color theme struct containing the resolved (day or night) color fields.
 typedef struct {
   GColor timeColor;
   GColor subtextPrimaryColor;
   GColor subtextSecondaryColor;
   GColor bgColor;
-  GColor pipColorPrimary;
-  GColor pipColorSecondary;
-  GColor ringStrokeColor;
-  GColor ringNightColor;
-  GColor ringDayColor;
-  GColor ringSunriseColor;
-  GColor ringSunsetColor;
-  GColor sunStrokeColor;
-  GColor sunFillColor;
 } ColorTheme;
 
+// Live settings. Persistence is per-field (settings.c), so this struct's layout
+// is free to change — add or remove fields without a migration.
 typedef struct {
   // text colors
   GColor timeColor;
   GColor subtextPrimaryColor;
   GColor subtextSecondaryColor;
-
-  // decoration colors
   GColor bgColor;
-  GColor pipColorPrimary;
-  GColor pipColorSecondary;
-  GColor ringStrokeColor;
-  GColor ringNightColor;
-  GColor ringDayColor;
-  GColor ringSunriseColor;
-  GColor ringSunsetColor;
-  GColor sunStrokeColor;
-  GColor sunFillColor;
 
   // night theme colors
   GColor nightTimeColor;
   GColor nightSubtextPrimaryColor;
   GColor nightSubtextSecondaryColor;
   GColor nightBgColor;
-  GColor nightPipColorPrimary;
-  GColor nightPipColorSecondary;
-  GColor nightRingStrokeColor;
-  GColor nightRingNightColor;
-  GColor nightRingDayColor;
-  GColor nightRingSunriseColor;
-  GColor nightRingSunsetColor;
-  GColor nightSunStrokeColor;
-  GColor nightSunFillColor;
 
   bool useNightTheme;
   bool useLargeFonts;
   bool showLeadingZero;
-  PipVisibilityType pipVisibility;
+  bool usePrimaryFontForAllWidgets;
   TempUnitType tempUnit;
   uint8_t language;
+  uint8_t timeFormat;  // TimeFormatType
 
   // Widget slots (stored as format strings)
   char widgetUpperSecondary[WIDGET_TEXT_LEN];
@@ -174,82 +102,12 @@ typedef struct {
   int16_t altCityUtcOffset;
   char altCity2Label[ALT_CITY_LABEL_LEN];
   int16_t altCity2UtcOffset;
-  int16_t localUtcOffset;
-  bool usePrimaryFontForAllWidgets;
+  int16_t localUtcOffset;  // derived each load; not persisted
+
   uint8_t region;  // globe centre region (EarthRegion)
-  char infoLayout[INFO_LAYOUT_LEN];
-  uint8_t timeFormat;  // TimeFormatType
   uint8_t earthUpdateInterval;  // globe day/night refresh interval, in minutes
-} Settings;
-
-typedef struct {
-  // text colors
-  GColor timeColor;
-  GColor subtextPrimaryColor;
-  GColor subtextSecondaryColor;
-
-  // decoration colors
-  GColor bgColor;
-  GColor pipColorPrimary;
-  GColor pipColorSecondary;
-  GColor ringStrokeColor;
-  GColor ringNightColor;
-  GColor ringDayColor;
-  GColor ringSunriseColor;
-  GColor ringSunsetColor;
-  GColor sunStrokeColor;
-  GColor sunFillColor;
-
-  // night theme colors
-  GColor nightTimeColor;
-  GColor nightSubtextPrimaryColor;
-  GColor nightSubtextSecondaryColor;
-  GColor nightBgColor;
-  GColor nightPipColorPrimary;
-  GColor nightPipColorSecondary;
-  GColor nightRingStrokeColor;
-  GColor nightRingNightColor;
-  GColor nightRingDayColor;
-  GColor nightRingSunriseColor;
-  GColor nightRingSunsetColor;
-  GColor nightSunStrokeColor;
-  GColor nightSunFillColor;
-
-  bool useNightTheme;
-  bool useLargeFonts;
-  bool showLeadingZero;
-
-  PipVisibilityType pipVisibility;
-  TempUnitType tempUnit;
-  uint8_t language;
-
-  // Widget slots (stored as format strings)
-  char widgetUpperSecondary[WIDGET_TEXT_LEN];
-  char widgetUpperPrimary[WIDGET_TEXT_LEN];
-  char widgetLowerPrimary[WIDGET_TEXT_LEN];
-  char widgetLowerSecondary[WIDGET_TEXT_LEN];
-} StoredSettings;
-
-// we're kinda at the limit for stored settings, so new settings get their own
-// special struct
-typedef struct {
-  char altCityLabel[ALT_CITY_LABEL_LEN];
-  int16_t altCityUtcOffset;
-  char altCity2Label[ALT_CITY_LABEL_LEN];
-  int16_t altCity2UtcOffset;
-  int16_t localUtcOffset;
-  bool usePrimaryFontForAllWidgets;
-  uint8_t region;  // globe centre region (EarthRegion)
   char infoLayout[INFO_LAYOUT_LEN];
-  uint8_t timeFormat;  // TimeFormatType
-  uint8_t earthUpdateInterval;  // globe refresh interval (min); appended last so
-                                // old blobs keep default
-} StoredSettingsExtra;
-
-typedef char StoredSettings_must_fit_in_persist_data
-    [(sizeof(StoredSettings) <= PERSIST_DATA_MAX_LENGTH) ? 1 : -1];
-typedef char StoredSettingsExtra_must_fit_in_persist_data
-    [(sizeof(StoredSettingsExtra) <= PERSIST_DATA_MAX_LENGTH) ? 1 : -1];
+} Settings;
 
 extern Settings globalSettings;
 

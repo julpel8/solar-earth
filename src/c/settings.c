@@ -6,88 +6,163 @@
 
 Settings globalSettings;
 
-static void populateStoredSettingsExtra(StoredSettingsExtra *storedSettingsExtra) {
-  strncpy(storedSettingsExtra->altCityLabel, globalSettings.altCityLabel,
-          ALT_CITY_LABEL_LEN);
-  storedSettingsExtra->altCityLabel[ALT_CITY_LABEL_LEN - 1] = '\0';
-  storedSettingsExtra->altCityUtcOffset = globalSettings.altCityUtcOffset;
-  strncpy(storedSettingsExtra->altCity2Label, globalSettings.altCity2Label,
-          ALT_CITY_LABEL_LEN);
-  storedSettingsExtra->altCity2Label[ALT_CITY_LABEL_LEN - 1] = '\0';
-  storedSettingsExtra->altCity2UtcOffset = globalSettings.altCity2UtcOffset;
-  storedSettingsExtra->localUtcOffset = globalSettings.localUtcOffset;
-  storedSettingsExtra->usePrimaryFontForAllWidgets =
-      globalSettings.usePrimaryFontForAllWidgets;
-  storedSettingsExtra->region = globalSettings.region;
-  strncpy(storedSettingsExtra->infoLayout, globalSettings.infoLayout,
-          INFO_LAYOUT_LEN);
-  storedSettingsExtra->infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
-  storedSettingsExtra->timeFormat = globalSettings.timeFormat;
-  storedSettingsExtra->earthUpdateInterval = globalSettings.earthUpdateInterval;
+// ---------------------------------------------------------------------------
+// Per-field persist keys. Each setting owns its own key, so adding or removing
+// a field never disturbs the others — no positional blob, no migrations.
+// Numbered from 100 to stay clear of the legacy/solar keys (1, 2, 3, 51).
+// ---------------------------------------------------------------------------
+enum {
+  PK_TIME_COLOR = 100,
+  PK_SUBTEXT_PRIMARY_COLOR,
+  PK_SUBTEXT_SECONDARY_COLOR,
+  PK_BG_COLOR,
+  PK_NIGHT_TIME_COLOR,
+  PK_NIGHT_SUBTEXT_PRIMARY_COLOR,
+  PK_NIGHT_SUBTEXT_SECONDARY_COLOR,
+  PK_NIGHT_BG_COLOR,
+  PK_USE_NIGHT_THEME,
+  PK_USE_LARGE_FONTS,
+  PK_SHOW_LEADING_ZERO,
+  PK_USE_PRIMARY_FONT,
+  PK_TEMP_UNIT,
+  PK_LANGUAGE,
+  PK_TIME_FORMAT,
+  PK_REGION,
+  PK_EARTH_UPDATE_INTERVAL,
+  PK_ALT_CITY_LABEL,
+  PK_ALT_CITY_UTC_OFFSET,
+  PK_ALT_CITY2_LABEL,
+  PK_ALT_CITY2_UTC_OFFSET,
+  PK_INFO_LAYOUT,
+  PK_WIDGET_UPPER_SECONDARY,
+  PK_WIDGET_UPPER_PRIMARY,
+  PK_WIDGET_LOWER_PRIMARY,
+  PK_WIDGET_LOWER_SECONDARY,
+};
+
+// ---------------------------------------------------------------------------
+// Legacy positional blobs (format <= v10). Read once during migration, then the
+// old keys are deleted. The layout MUST match exactly what older builds wrote,
+// including the now-dead ring/sun/pip fields, so the byte offsets line up.
+// ---------------------------------------------------------------------------
+typedef enum { LEGACY_PIP_ALL = 0, LEGACY_PIP_MAJOR = 1, LEGACY_PIP_HIDDEN = 2 }
+    LegacyPipVisibilityType;
+
+typedef struct {
+  GColor timeColor;
+  GColor subtextPrimaryColor;
+  GColor subtextSecondaryColor;
+  GColor bgColor;
+  GColor pipColorPrimary;
+  GColor pipColorSecondary;
+  GColor ringStrokeColor;
+  GColor ringNightColor;
+  GColor ringDayColor;
+  GColor ringSunriseColor;
+  GColor ringSunsetColor;
+  GColor sunStrokeColor;
+  GColor sunFillColor;
+  GColor nightTimeColor;
+  GColor nightSubtextPrimaryColor;
+  GColor nightSubtextSecondaryColor;
+  GColor nightBgColor;
+  GColor nightPipColorPrimary;
+  GColor nightPipColorSecondary;
+  GColor nightRingStrokeColor;
+  GColor nightRingNightColor;
+  GColor nightRingDayColor;
+  GColor nightRingSunriseColor;
+  GColor nightRingSunsetColor;
+  GColor nightSunStrokeColor;
+  GColor nightSunFillColor;
+  bool useNightTheme;
+  bool useLargeFonts;
+  bool showLeadingZero;
+  LegacyPipVisibilityType pipVisibility;
+  TempUnitType tempUnit;
+  uint8_t language;
+  char widgetUpperSecondary[WIDGET_TEXT_LEN];
+  char widgetUpperPrimary[WIDGET_TEXT_LEN];
+  char widgetLowerPrimary[WIDGET_TEXT_LEN];
+  char widgetLowerSecondary[WIDGET_TEXT_LEN];
+} LegacyStoredSettings;
+
+typedef struct {
+  char altCityLabel[ALT_CITY_LABEL_LEN];
+  int16_t altCityUtcOffset;
+  char altCity2Label[ALT_CITY_LABEL_LEN];
+  int16_t altCity2UtcOffset;
+  int16_t localUtcOffset;
+  bool usePrimaryFontForAllWidgets;
+  uint8_t region;
+  char infoLayout[INFO_LAYOUT_LEN];
+  uint8_t timeFormat;
+  uint8_t earthUpdateInterval;
+} LegacyStoredSettingsExtra;
+
+// ---------------------------------------------------------------------------
+// Small persist helpers
+// ---------------------------------------------------------------------------
+static void persist_put_color(uint32_t key, GColor c) {
+  persist_write_data(key, &c, sizeof(GColor));
 }
 
-void Settings_init() { Settings_loadFromStorage(); }
-
-void Settings_deinit() { Settings_saveToStorage(); }
-
-void Settings_loadFromStorage() {
-  int storedSettingsVersion = 0;
-  if (persist_exists(SETTINGS_VERSION_PERSIST_KEY)) {
-    storedSettingsVersion = persist_read_int(SETTINGS_VERSION_PERSIST_KEY);
+static GColor persist_get_color(uint32_t key, GColor def) {
+  GColor c = def;
+  if (persist_exists(key)) {
+    persist_read_data(key, &c, sizeof(GColor));
   }
+  return c;
+}
 
-  // set all the defaults!
-  // text colors
+static int persist_get_int(uint32_t key, int def) {
+  return persist_exists(key) ? persist_read_int(key) : def;
+}
+
+static bool persist_get_bool(uint32_t key, bool def) {
+  return persist_exists(key) ? persist_read_bool(key) : def;
+}
+
+// Overwrite buf only if the key exists; otherwise leave the caller's default.
+static void persist_load_str(uint32_t key, char *buf, size_t buf_len) {
+  if (persist_exists(key)) {
+    persist_read_string(key, buf, buf_len);
+    buf[buf_len - 1] = '\0';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Defaults / load / save
+// ---------------------------------------------------------------------------
+static void set_defaults(void) {
+  memset(&globalSettings, 0, sizeof(globalSettings));
+
   globalSettings.timeColor = DEFAULT_TIME_COLOR;
   globalSettings.subtextPrimaryColor = DEFAULT_SUBTEXT_PRIMARY_COLOR;
   globalSettings.subtextSecondaryColor = DEFAULT_SUBTEXT_SECONDARY_COLOR;
-
-  // decoration colors
   globalSettings.bgColor = DEFAULT_BG_COLOR;
-  globalSettings.pipColorPrimary = DEFAULT_PIP_COLOR_PRIMARY;
-  globalSettings.pipColorSecondary = DEFAULT_PIP_COLOR_SECONDARY;
-  globalSettings.ringStrokeColor = DEFAULT_RING_STROKE_COLOR;
-  globalSettings.ringNightColor = DEFAULT_RING_NIGHT_COLOR;
-  globalSettings.ringDayColor = DEFAULT_RING_DAY_COLOR;
-  globalSettings.ringSunriseColor = DEFAULT_RING_SUNRISE_COLOR;
-  globalSettings.ringSunsetColor = DEFAULT_RING_SUNSET_COLOR;
-  globalSettings.sunStrokeColor = DEFAULT_SUN_STROKE_COLOR;
-  globalSettings.sunFillColor = DEFAULT_SUN_FILL_COLOR;
 
-  // night theme colors
   globalSettings.nightTimeColor = DEFAULT_NIGHT_TIME_COLOR;
   globalSettings.nightSubtextPrimaryColor = DEFAULT_NIGHT_SUBTEXT_PRIMARY_COLOR;
   globalSettings.nightSubtextSecondaryColor =
       DEFAULT_NIGHT_SUBTEXT_SECONDARY_COLOR;
   globalSettings.nightBgColor = DEFAULT_NIGHT_BG_COLOR;
-  globalSettings.nightPipColorPrimary = DEFAULT_NIGHT_PIP_COLOR_PRIMARY;
-  globalSettings.nightPipColorSecondary = DEFAULT_NIGHT_PIP_COLOR_SECONDARY;
-  globalSettings.nightRingStrokeColor = DEFAULT_NIGHT_RING_STROKE_COLOR;
-  globalSettings.nightRingNightColor = DEFAULT_NIGHT_RING_NIGHT_COLOR;
-  globalSettings.nightRingDayColor = DEFAULT_NIGHT_RING_DAY_COLOR;
-  globalSettings.nightRingSunriseColor = DEFAULT_NIGHT_RING_SUNRISE_COLOR;
-  globalSettings.nightRingSunsetColor = DEFAULT_NIGHT_RING_SUNSET_COLOR;
-  globalSettings.nightSunStrokeColor = DEFAULT_NIGHT_SUN_STROKE_COLOR;
-  globalSettings.nightSunFillColor = DEFAULT_NIGHT_SUN_FILL_COLOR;
 
-  // various appearance settings
   globalSettings.useNightTheme = true;
   globalSettings.useLargeFonts = false;
   globalSettings.showLeadingZero = false;
-  globalSettings.pipVisibility = PIP_SHOW_ALL;
+  globalSettings.usePrimaryFontForAllWidgets = false;
   globalSettings.tempUnit = TEMP_UNIT_CELSIUS;
   globalSettings.language = 0;
   globalSettings.timeFormat = TIME_FORMAT_SYSTEM;
+  globalSettings.region = 0;             // Europe
   globalSettings.earthUpdateInterval = 5;  // minutes
 
-  // widget slot defaults
-  // Weather-dependent slots use placeholders until JS sends real data.
-  // This prevents raw tokens like "{temp}°" from flashing on first run.
+  // Weather-dependent slots use placeholders until JS sends real data, so raw
+  // tokens like "{temp}°" don't flash on first run.
   strncpy(globalSettings.widgetUpperSecondary, "--° (--° / --°)",
           WIDGET_TEXT_LEN);
   strncpy(globalSettings.widgetUpperPrimary, "--", WIDGET_TEXT_LEN);
-  // Lower-primary defaults to the {local_date} super-token; widgets.c expands
-  // it at render time using the active language's idiomatic format.
   strncpy(globalSettings.widgetLowerPrimary, "{local_date}", WIDGET_TEXT_LEN);
 #if defined(PBL_HEALTH)
   strncpy(globalSettings.widgetLowerSecondary, "{steps} {t:STEPS}",
@@ -96,77 +171,163 @@ void Settings_loadFromStorage() {
   strncpy(globalSettings.widgetLowerSecondary, "{t:BATTERY} {batt}%",
           WIDGET_TEXT_LEN);
 #endif
+
   strncpy(globalSettings.altCityLabel, "TYO", ALT_CITY_LABEL_LEN);
-  globalSettings.altCityLabel[ALT_CITY_LABEL_LEN - 1] = '\0';
   globalSettings.altCityUtcOffset = 540;
   strncpy(globalSettings.altCity2Label, "UTC", ALT_CITY_LABEL_LEN);
-  globalSettings.altCity2Label[ALT_CITY_LABEL_LEN - 1] = '\0';
   globalSettings.altCity2UtcOffset = 0;
   globalSettings.localUtcOffset = 0;
-  globalSettings.usePrimaryFontForAllWidgets = false;
-  globalSettings.region = 0;  // Europe
+
   strncpy(globalSettings.infoLayout, DEFAULT_INFO_LAYOUT, INFO_LAYOUT_LEN);
-  globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
+}
 
-  if (persist_exists(SETTINGS_PERSIST_KEY)) {
-    const int stored_size = persist_get_size(SETTINGS_PERSIST_KEY);
-    if (stored_size > 0) {
-      // Settings storage is append-only: defaults above cover fields that did
-      // not exist in older persisted blobs.
-      const int read_size = stored_size < (int)sizeof(StoredSettings)
-                                ? stored_size
-                                : (int)sizeof(StoredSettings);
-      persist_read_data(SETTINGS_PERSIST_KEY, &globalSettings, read_size);
+static void load_from_keys(void) {
+  globalSettings.timeColor =
+      persist_get_color(PK_TIME_COLOR, globalSettings.timeColor);
+  globalSettings.subtextPrimaryColor =
+      persist_get_color(PK_SUBTEXT_PRIMARY_COLOR, globalSettings.subtextPrimaryColor);
+  globalSettings.subtextSecondaryColor = persist_get_color(
+      PK_SUBTEXT_SECONDARY_COLOR, globalSettings.subtextSecondaryColor);
+  globalSettings.bgColor = persist_get_color(PK_BG_COLOR, globalSettings.bgColor);
+
+  globalSettings.nightTimeColor =
+      persist_get_color(PK_NIGHT_TIME_COLOR, globalSettings.nightTimeColor);
+  globalSettings.nightSubtextPrimaryColor = persist_get_color(
+      PK_NIGHT_SUBTEXT_PRIMARY_COLOR, globalSettings.nightSubtextPrimaryColor);
+  globalSettings.nightSubtextSecondaryColor = persist_get_color(
+      PK_NIGHT_SUBTEXT_SECONDARY_COLOR, globalSettings.nightSubtextSecondaryColor);
+  globalSettings.nightBgColor =
+      persist_get_color(PK_NIGHT_BG_COLOR, globalSettings.nightBgColor);
+
+  globalSettings.useNightTheme =
+      persist_get_bool(PK_USE_NIGHT_THEME, globalSettings.useNightTheme);
+  globalSettings.useLargeFonts =
+      persist_get_bool(PK_USE_LARGE_FONTS, globalSettings.useLargeFonts);
+  globalSettings.showLeadingZero =
+      persist_get_bool(PK_SHOW_LEADING_ZERO, globalSettings.showLeadingZero);
+  globalSettings.usePrimaryFontForAllWidgets = persist_get_bool(
+      PK_USE_PRIMARY_FONT, globalSettings.usePrimaryFontForAllWidgets);
+
+  globalSettings.tempUnit =
+      (TempUnitType)persist_get_int(PK_TEMP_UNIT, globalSettings.tempUnit);
+  globalSettings.language =
+      (uint8_t)persist_get_int(PK_LANGUAGE, globalSettings.language);
+  globalSettings.timeFormat =
+      (uint8_t)persist_get_int(PK_TIME_FORMAT, globalSettings.timeFormat);
+  globalSettings.region =
+      (uint8_t)persist_get_int(PK_REGION, globalSettings.region);
+  globalSettings.earthUpdateInterval = (uint8_t)persist_get_int(
+      PK_EARTH_UPDATE_INTERVAL, globalSettings.earthUpdateInterval);
+
+  globalSettings.altCityUtcOffset = (int16_t)persist_get_int(
+      PK_ALT_CITY_UTC_OFFSET, globalSettings.altCityUtcOffset);
+  globalSettings.altCity2UtcOffset = (int16_t)persist_get_int(
+      PK_ALT_CITY2_UTC_OFFSET, globalSettings.altCity2UtcOffset);
+
+  persist_load_str(PK_ALT_CITY_LABEL, globalSettings.altCityLabel,
+                   ALT_CITY_LABEL_LEN);
+  persist_load_str(PK_ALT_CITY2_LABEL, globalSettings.altCity2Label,
+                   ALT_CITY_LABEL_LEN);
+  persist_load_str(PK_INFO_LAYOUT, globalSettings.infoLayout, INFO_LAYOUT_LEN);
+  persist_load_str(PK_WIDGET_UPPER_SECONDARY,
+                   globalSettings.widgetUpperSecondary, WIDGET_TEXT_LEN);
+  persist_load_str(PK_WIDGET_UPPER_PRIMARY, globalSettings.widgetUpperPrimary,
+                   WIDGET_TEXT_LEN);
+  persist_load_str(PK_WIDGET_LOWER_PRIMARY, globalSettings.widgetLowerPrimary,
+                   WIDGET_TEXT_LEN);
+  persist_load_str(PK_WIDGET_LOWER_SECONDARY,
+                   globalSettings.widgetLowerSecondary, WIDGET_TEXT_LEN);
+}
+
+// One-time import of the old positional blob into globalSettings. globalSettings
+// already holds the defaults, so any field missing from a short legacy blob
+// keeps its default.
+static void migrate_from_legacy(void) {
+  if (persist_exists(LEGACY_SETTINGS_PERSIST_KEY)) {
+    LegacyStoredSettings ls;
+    memset(&ls, 0, sizeof(ls));
+    int sz = persist_get_size(LEGACY_SETTINGS_PERSIST_KEY);
+    int rd = sz < (int)sizeof(ls) ? sz : (int)sizeof(ls);
+    if (rd > 0) {
+      persist_read_data(LEGACY_SETTINGS_PERSIST_KEY, &ls, rd);
+
+      globalSettings.timeColor = ls.timeColor;
+      globalSettings.subtextPrimaryColor = ls.subtextPrimaryColor;
+      globalSettings.subtextSecondaryColor = ls.subtextSecondaryColor;
+      globalSettings.bgColor = ls.bgColor;
+      globalSettings.nightTimeColor = ls.nightTimeColor;
+      globalSettings.nightSubtextPrimaryColor = ls.nightSubtextPrimaryColor;
+      globalSettings.nightSubtextSecondaryColor = ls.nightSubtextSecondaryColor;
+      globalSettings.nightBgColor = ls.nightBgColor;
+      globalSettings.useNightTheme = ls.useNightTheme;
+      globalSettings.useLargeFonts = ls.useLargeFonts;
+      globalSettings.showLeadingZero = ls.showLeadingZero;
+      globalSettings.tempUnit = ls.tempUnit;
+      globalSettings.language = ls.language;
+      strncpy(globalSettings.widgetUpperSecondary, ls.widgetUpperSecondary,
+              WIDGET_TEXT_LEN);
+      globalSettings.widgetUpperSecondary[WIDGET_TEXT_LEN - 1] = '\0';
+      strncpy(globalSettings.widgetUpperPrimary, ls.widgetUpperPrimary,
+              WIDGET_TEXT_LEN);
+      globalSettings.widgetUpperPrimary[WIDGET_TEXT_LEN - 1] = '\0';
+      strncpy(globalSettings.widgetLowerPrimary, ls.widgetLowerPrimary,
+              WIDGET_TEXT_LEN);
+      globalSettings.widgetLowerPrimary[WIDGET_TEXT_LEN - 1] = '\0';
+      strncpy(globalSettings.widgetLowerSecondary, ls.widgetLowerSecondary,
+              WIDGET_TEXT_LEN);
+      globalSettings.widgetLowerSecondary[WIDGET_TEXT_LEN - 1] = '\0';
     }
   }
 
-  if (persist_exists(SETTINGS_EXTRA_PERSIST_KEY)) {
-    const int stored_size = persist_get_size(SETTINGS_EXTRA_PERSIST_KEY);
-    if (stored_size > 0) {
-      StoredSettingsExtra storedSettingsExtra;
-      memset(&storedSettingsExtra, 0, sizeof(StoredSettingsExtra));
-      populateStoredSettingsExtra(&storedSettingsExtra);
-      const int read_size = stored_size < (int)sizeof(StoredSettingsExtra)
-                                ? stored_size
-                                : (int)sizeof(StoredSettingsExtra);
-      persist_read_data(SETTINGS_EXTRA_PERSIST_KEY, &storedSettingsExtra,
-                        read_size);
+  if (persist_exists(LEGACY_SETTINGS_EXTRA_PERSIST_KEY)) {
+    LegacyStoredSettingsExtra le;
+    memset(&le, 0, sizeof(le));
+    int sz = persist_get_size(LEGACY_SETTINGS_EXTRA_PERSIST_KEY);
+    int rd = sz < (int)sizeof(le) ? sz : (int)sizeof(le);
+    if (rd > 0) {
+      persist_read_data(LEGACY_SETTINGS_EXTRA_PERSIST_KEY, &le, rd);
 
-      strncpy(globalSettings.altCityLabel, storedSettingsExtra.altCityLabel,
-              ALT_CITY_LABEL_LEN);
+      strncpy(globalSettings.altCityLabel, le.altCityLabel, ALT_CITY_LABEL_LEN);
       globalSettings.altCityLabel[ALT_CITY_LABEL_LEN - 1] = '\0';
-      globalSettings.altCityUtcOffset = storedSettingsExtra.altCityUtcOffset;
-      strncpy(globalSettings.altCity2Label, storedSettingsExtra.altCity2Label,
-              ALT_CITY_LABEL_LEN);
+      globalSettings.altCityUtcOffset = le.altCityUtcOffset;
+      strncpy(globalSettings.altCity2Label, le.altCity2Label, ALT_CITY_LABEL_LEN);
       globalSettings.altCity2Label[ALT_CITY_LABEL_LEN - 1] = '\0';
-      globalSettings.altCity2UtcOffset = storedSettingsExtra.altCity2UtcOffset;
-      globalSettings.localUtcOffset = storedSettingsExtra.localUtcOffset;
+      globalSettings.altCity2UtcOffset = le.altCity2UtcOffset;
       globalSettings.usePrimaryFontForAllWidgets =
-          storedSettingsExtra.usePrimaryFontForAllWidgets;
-      globalSettings.region = storedSettingsExtra.region;
-      strncpy(globalSettings.infoLayout, storedSettingsExtra.infoLayout,
-              INFO_LAYOUT_LEN);
+          le.usePrimaryFontForAllWidgets;
+      globalSettings.region = le.region;
+      strncpy(globalSettings.infoLayout, le.infoLayout, INFO_LAYOUT_LEN);
       globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
-      globalSettings.timeFormat = storedSettingsExtra.timeFormat;
-      globalSettings.earthUpdateInterval =
-          storedSettingsExtra.earthUpdateInterval;
+      globalSettings.timeFormat = le.timeFormat;
+      globalSettings.earthUpdateInterval = le.earthUpdateInterval;
     }
   }
+}
 
-  // v4 redesign: force the dark globe look on upgrade. This intentionally
-  // overrides any background colour chosen under the old (white-default)
-  // theme — the new single background picker lets users re-pick afterwards.
-  if (storedSettingsVersion < 4) {
-    globalSettings.bgColor = DEFAULT_BG_COLOR;
-    globalSettings.nightBgColor = DEFAULT_NIGHT_BG_COLOR;
+void Settings_init() { Settings_loadFromStorage(); }
+
+void Settings_deinit() { Settings_saveToStorage(); }
+
+void Settings_loadFromStorage() {
+  set_defaults();
+
+  int version = persist_get_int(SETTINGS_VERSION_PERSIST_KEY, 0);
+
+  if (version >= CURRENT_SETTINGS_VERSION) {
+    // New keyed format.
+    load_from_keys();
+  } else if (persist_exists(LEGACY_SETTINGS_PERSIST_KEY) ||
+             persist_exists(LEGACY_SETTINGS_EXTRA_PERSIST_KEY)) {
+    // One-time migration from the old positional blob.
+    migrate_from_legacy();
+    Settings_saveToStorage();  // rewrite in keyed format, bumps the version
+    persist_delete(LEGACY_SETTINGS_PERSIST_KEY);
+    persist_delete(LEGACY_SETTINGS_EXTRA_PERSIST_KEY);
   }
+  // else: fresh install — defaults stand; persisted on the first settings change.
 
-  // v6 dropped textOutlineStyle and v7 dropped showSolarRing, both of which sat
-  // before infoLayout in StoredSettingsExtra. v8 added a per-line size field to
-  // the infoLayout entries ("id:group" -> "id:group:size"). Reset infoLayout on
-  // upgrade so neither the layout shift in older blobs nor the old two-field
-  // format can leave a corrupted or sizeless value behind.
-  if (storedSettingsVersion < 8 || globalSettings.infoLayout[0] == '\0') {
+  // Guard against an empty/corrupt info layout.
+  if (globalSettings.infoLayout[0] == '\0') {
     strncpy(globalSettings.infoLayout, DEFAULT_INFO_LAYOUT, INFO_LAYOUT_LEN);
     globalSettings.infoLayout[INFO_LAYOUT_LEN - 1] = '\0';
   }
@@ -176,16 +337,44 @@ void Settings_loadFromStorage() {
 
 void Settings_saveToStorage() {
   Settings_updateDynamicSettings();
-  StoredSettings storedSettings;
-  memcpy(&storedSettings, &globalSettings, sizeof(StoredSettings));
-  persist_write_data(SETTINGS_PERSIST_KEY, &storedSettings,
-                     sizeof(StoredSettings));
 
-  StoredSettingsExtra storedSettingsExtra;
-  memset(&storedSettingsExtra, 0, sizeof(StoredSettingsExtra));
-  populateStoredSettingsExtra(&storedSettingsExtra);
-  persist_write_data(SETTINGS_EXTRA_PERSIST_KEY, &storedSettingsExtra,
-                     sizeof(StoredSettingsExtra));
+  persist_put_color(PK_TIME_COLOR, globalSettings.timeColor);
+  persist_put_color(PK_SUBTEXT_PRIMARY_COLOR, globalSettings.subtextPrimaryColor);
+  persist_put_color(PK_SUBTEXT_SECONDARY_COLOR,
+                    globalSettings.subtextSecondaryColor);
+  persist_put_color(PK_BG_COLOR, globalSettings.bgColor);
+  persist_put_color(PK_NIGHT_TIME_COLOR, globalSettings.nightTimeColor);
+  persist_put_color(PK_NIGHT_SUBTEXT_PRIMARY_COLOR,
+                    globalSettings.nightSubtextPrimaryColor);
+  persist_put_color(PK_NIGHT_SUBTEXT_SECONDARY_COLOR,
+                    globalSettings.nightSubtextSecondaryColor);
+  persist_put_color(PK_NIGHT_BG_COLOR, globalSettings.nightBgColor);
+
+  persist_write_bool(PK_USE_NIGHT_THEME, globalSettings.useNightTheme);
+  persist_write_bool(PK_USE_LARGE_FONTS, globalSettings.useLargeFonts);
+  persist_write_bool(PK_SHOW_LEADING_ZERO, globalSettings.showLeadingZero);
+  persist_write_bool(PK_USE_PRIMARY_FONT,
+                     globalSettings.usePrimaryFontForAllWidgets);
+
+  persist_write_int(PK_TEMP_UNIT, globalSettings.tempUnit);
+  persist_write_int(PK_LANGUAGE, globalSettings.language);
+  persist_write_int(PK_TIME_FORMAT, globalSettings.timeFormat);
+  persist_write_int(PK_REGION, globalSettings.region);
+  persist_write_int(PK_EARTH_UPDATE_INTERVAL, globalSettings.earthUpdateInterval);
+  persist_write_int(PK_ALT_CITY_UTC_OFFSET, globalSettings.altCityUtcOffset);
+  persist_write_int(PK_ALT_CITY2_UTC_OFFSET, globalSettings.altCity2UtcOffset);
+
+  persist_write_string(PK_ALT_CITY_LABEL, globalSettings.altCityLabel);
+  persist_write_string(PK_ALT_CITY2_LABEL, globalSettings.altCity2Label);
+  persist_write_string(PK_INFO_LAYOUT, globalSettings.infoLayout);
+  persist_write_string(PK_WIDGET_UPPER_SECONDARY,
+                       globalSettings.widgetUpperSecondary);
+  persist_write_string(PK_WIDGET_UPPER_PRIMARY,
+                       globalSettings.widgetUpperPrimary);
+  persist_write_string(PK_WIDGET_LOWER_PRIMARY,
+                       globalSettings.widgetLowerPrimary);
+  persist_write_string(PK_WIDGET_LOWER_SECONDARY,
+                       globalSettings.widgetLowerSecondary);
 
   persist_write_int(SETTINGS_VERSION_PERSIST_KEY, CURRENT_SETTINGS_VERSION);
 }
@@ -248,44 +437,21 @@ uint16_t settings_earth_update_seconds(void) {
 ColorTheme getCurrentColorTheme() {
   ColorTheme theme;
 
-  // Get current time in minutes since midnight
   struct tm *timeInfo = getCurrentTime();
   int currentMinutes = timeInfo->tm_hour * 60 + timeInfo->tm_min;
 
   bool useNight = globalSettings.useNightTheme && isNightTime(currentMinutes);
-
-  APP_LOG(APP_LOG_LEVEL_DEBUG,
-          "getCurrentColorTheme: useNightTheme=%d, useNight=%d",
-          globalSettings.useNightTheme, useNight);
 
   if (useNight) {
     theme.timeColor = globalSettings.nightTimeColor;
     theme.subtextPrimaryColor = globalSettings.nightSubtextPrimaryColor;
     theme.subtextSecondaryColor = globalSettings.nightSubtextSecondaryColor;
     theme.bgColor = globalSettings.nightBgColor;
-    theme.pipColorPrimary = globalSettings.nightPipColorPrimary;
-    theme.pipColorSecondary = globalSettings.nightPipColorSecondary;
-    theme.ringStrokeColor = globalSettings.nightRingStrokeColor;
-    theme.ringNightColor = globalSettings.nightRingNightColor;
-    theme.ringDayColor = globalSettings.nightRingDayColor;
-    theme.ringSunriseColor = globalSettings.nightRingSunriseColor;
-    theme.ringSunsetColor = globalSettings.nightRingSunsetColor;
-    theme.sunStrokeColor = globalSettings.nightSunStrokeColor;
-    theme.sunFillColor = globalSettings.nightSunFillColor;
   } else {
     theme.timeColor = globalSettings.timeColor;
     theme.subtextPrimaryColor = globalSettings.subtextPrimaryColor;
     theme.subtextSecondaryColor = globalSettings.subtextSecondaryColor;
     theme.bgColor = globalSettings.bgColor;
-    theme.pipColorPrimary = globalSettings.pipColorPrimary;
-    theme.pipColorSecondary = globalSettings.pipColorSecondary;
-    theme.ringStrokeColor = globalSettings.ringStrokeColor;
-    theme.ringNightColor = globalSettings.ringNightColor;
-    theme.ringDayColor = globalSettings.ringDayColor;
-    theme.ringSunriseColor = globalSettings.ringSunriseColor;
-    theme.ringSunsetColor = globalSettings.ringSunsetColor;
-    theme.sunStrokeColor = globalSettings.sunStrokeColor;
-    theme.sunFillColor = globalSettings.sunFillColor;
   }
 
   return theme;

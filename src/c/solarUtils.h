@@ -15,15 +15,7 @@
 #define DEFAULT_SUNSET_TIME 1080
 
 // persistent storage
-#define LOCATION_DATA_KEY 50
 #define SOLAR_DATA_KEY 51
-
-typedef struct {
-  float lat;
-  float lng;
-  float tzOffset;
-  time_t lastUpdatedTime;
-} LocationInfo;
 
 typedef struct {
   int sunsetMinute;
@@ -36,8 +28,6 @@ typedef struct {
 void solarUtils_init();
 
 void solarUtils_setSolarMinutes(int sunrise, int sunset);
-
-void solarUtils_updateLocation(LocationInfo loc);
 
 void solarUtils_recalculateSolarData();
 

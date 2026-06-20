@@ -5,7 +5,7 @@
 #include <pebble.h>
 
 static void format_alt_time(char *buf, size_t buf_len, struct tm *alt_time) {
-  if (clock_is_24h_style()) {
+  if (settings_is_24h()) {
     strftime(buf, buf_len, "%H:%M", alt_time);
   } else {
     strftime(buf, buf_len, "%I:%M %p", alt_time);

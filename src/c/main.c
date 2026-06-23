@@ -103,6 +103,7 @@ static void update_clock() {
 // settings might have changed, so recalculate solar data and refresh screen
 void onSettingsChanged() {
   bool regionChanged = earth_render_set_region(globalSettings.region);
+  bool colorsChanged = earth_render_set_colors();
 
   earth_render_set_bg(getCurrentColorTheme().bgColor);
 
@@ -110,7 +111,7 @@ void onSettingsChanged() {
     quickViewLayerReposition();
   }
 
-  if (regionChanged) {
+  if (regionChanged || colorsChanged) {
     earth_render_force_update(time(NULL));
   }
 

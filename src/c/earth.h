@@ -34,6 +34,11 @@ void earth_render_set_bg(GColor bg);
 // when a switch actually happened (caller may want to reposition / re-shade).
 bool earth_render_set_region(uint8_t region);
 
+// Re-apply the globe colours from globalSettings if they changed since the
+// loaded bitmap was built (reloads the region). Returns true when a reload
+// happened (caller should force a day/night re-shade).
+bool earth_render_set_colors(void);
+
 // Recompute the day/night shading if the refresh interval has elapsed.
 void earth_render_maybe_update(time_t now);
 

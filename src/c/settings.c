@@ -45,6 +45,11 @@ enum {
   PK_LINE_OUTLINE_2,               // 134
   PK_LINE_OUTLINE_3,               // 135
   PK_LINE_OUTLINE_4,               // 136
+  PK_GLOBE_DAY_OCEAN = 137,        // must stay contiguous: see load/save
+  PK_GLOBE_DAY_LAND,               // 138
+  PK_GLOBE_NIGHT_OCEAN,            // 139
+  PK_GLOBE_NIGHT_LAND,             // 140
+  PK_GLOBE_CITY,                   // 141
 };
 
 // ---------------------------------------------------------------------------
@@ -157,6 +162,12 @@ static void set_defaults(void) {
   }
   globalSettings.bgColor = DEFAULT_BG_COLOR;
 
+  globalSettings.globeDayOcean = GColorFromHEX(DEFAULT_GLOBE_DAY_OCEAN_HEX);
+  globalSettings.globeDayLand = GColorFromHEX(DEFAULT_GLOBE_DAY_LAND_HEX);
+  globalSettings.globeNightOcean = GColorFromHEX(DEFAULT_GLOBE_NIGHT_OCEAN_HEX);
+  globalSettings.globeNightLand = GColorFromHEX(DEFAULT_GLOBE_NIGHT_LAND_HEX);
+  globalSettings.globeCity = GColorFromHEX(DEFAULT_GLOBE_CITY_HEX);
+
   globalSettings.useLargeFonts = false;
   globalSettings.showLeadingZero = false;
   globalSettings.usePrimaryFontForAllWidgets = false;
@@ -197,6 +208,17 @@ static void load_from_keys(void) {
         PK_LINE_OUTLINE_0 + i, globalSettings.lineOutlineColor[i]);
   }
   globalSettings.bgColor = persist_get_color(PK_BG_COLOR, globalSettings.bgColor);
+
+  globalSettings.globeDayOcean =
+      persist_get_color(PK_GLOBE_DAY_OCEAN, globalSettings.globeDayOcean);
+  globalSettings.globeDayLand =
+      persist_get_color(PK_GLOBE_DAY_LAND, globalSettings.globeDayLand);
+  globalSettings.globeNightOcean =
+      persist_get_color(PK_GLOBE_NIGHT_OCEAN, globalSettings.globeNightOcean);
+  globalSettings.globeNightLand =
+      persist_get_color(PK_GLOBE_NIGHT_LAND, globalSettings.globeNightLand);
+  globalSettings.globeCity =
+      persist_get_color(PK_GLOBE_CITY, globalSettings.globeCity);
 
   globalSettings.useLargeFonts =
       persist_get_bool(PK_USE_LARGE_FONTS, globalSettings.useLargeFonts);
@@ -335,6 +357,12 @@ void Settings_saveToStorage() {
     persist_put_color(PK_LINE_OUTLINE_0 + i, globalSettings.lineOutlineColor[i]);
   }
   persist_put_color(PK_BG_COLOR, globalSettings.bgColor);
+
+  persist_put_color(PK_GLOBE_DAY_OCEAN, globalSettings.globeDayOcean);
+  persist_put_color(PK_GLOBE_DAY_LAND, globalSettings.globeDayLand);
+  persist_put_color(PK_GLOBE_NIGHT_OCEAN, globalSettings.globeNightOcean);
+  persist_put_color(PK_GLOBE_NIGHT_LAND, globalSettings.globeNightLand);
+  persist_put_color(PK_GLOBE_CITY, globalSettings.globeCity);
 
   persist_write_bool(PK_USE_LARGE_FONTS, globalSettings.useLargeFonts);
   persist_write_bool(PK_SHOW_LEADING_ZERO, globalSettings.showLeadingZero);

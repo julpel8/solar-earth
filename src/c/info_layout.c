@@ -24,7 +24,8 @@ typedef struct {
   GFont font;
   int height; // true pixel height from metrics
   int offset; // top dead-space offset from metrics
-  GColor color;
+  GColor color;    // text fill
+  GColor outline;  // text outline (halo)
   uint8_t group;
 } SlotDescriptor;
 
@@ -109,7 +110,7 @@ static bool parse_info_layout(const char *layout, InfoLayoutItem *items,
     // Optional ":size" third field. Older layouts ("id:group") omit it; default
     // those lines to the medium size.
     uint8_t size = INFO_SIZE_DEFAULT;
-    if (p[0] == ':' && p[1] >= '0' && p[1] <= '2') {
+    if (p[0] == ':' && p[1] >= '0' && p[1] <= '3') {
       size = (uint8_t)(p[1] - '0');
       p += 2;
     }
@@ -153,12 +154,11 @@ static int slot_group_height(SlotDescriptor *slots, int count, uint8_t group) {
   return height;
 }
 
-// Draw text with a fixed halo so it stays readable over the globe.
-// Always white text with a black outline.
+// Draw text with a halo so it stays readable over the globe. The fill and the
+// halo each follow the per-line colours passed in.
 static void draw_text_halo_aligned(GContext *ctx, const char *text, GFont font,
-                                   GRect frame, GTextAlignment align) {
-  GColor halo = GColorBlack;
-  GColor text_color = GColorWhite;
+                                   GRect frame, GTextAlignment align,
+                                   GColor text_color, GColor halo) {
   static const int dx[] = {-1, 1, 0, 0, -1, -1, 1, 1};
   static const int dy[] = {0, 0, -1, 1, -1, 1, -1, 1};
   graphics_context_set_text_color(ctx, halo);
@@ -174,9 +174,9 @@ static void draw_text_halo_aligned(GContext *ctx, const char *text, GFont font,
 }
 
 static void draw_text_with_halo(GContext *ctx, const char *text, GFont font,
-                                GRect frame, GColor color) {
-  (void)color;
-  draw_text_halo_aligned(ctx, text, font, frame, GTextAlignmentCenter);
+                                GRect frame, GColor color, GColor outline) {
+  draw_text_halo_aligned(ctx, text, font, frame, GTextAlignmentCenter, color,
+                         outline);
 }
 
 // Draw the main time with a separate, smaller AM/PM suffix. The LECO "numbers"
@@ -188,7 +188,8 @@ static void draw_time_with_ampm(GContext *ctx, SlotDescriptor *s, int y,
   const char *space = strrchr(s->text, ' ');
   if (!space) {
     draw_text_with_halo(ctx, s->text, s->font,
-                        GRect(0, y - s->offset, width, s->height), s->color);
+                        GRect(0, y - s->offset, width, s->height), s->color,
+                        s->outline);
     return;
   }
 
@@ -217,14 +218,14 @@ static void draw_time_with_ampm(GContext *ctx, SlotDescriptor *s, int y,
   draw_text_halo_aligned(ctx, num_part, s->font,
                          GRect(start_x, y - s->offset, num_size.w + 4,
                                s->height),
-                         GTextAlignmentLeft);
+                         GTextAlignmentLeft, s->color, s->outline);
 
   // Suffix: align its baseline to the digits' baseline (y + s->height).
   int am_x = start_x + num_size.w + gap;
   int am_y = y + s->height - amh - amo;
   draw_text_halo_aligned(ctx, ampm, am_font,
                          GRect(am_x, am_y, am_size.w + 4, amh + amo + 4),
-                         GTextAlignmentLeft);
+                         GTextAlignmentLeft, s->color, s->outline);
 }
 
 static void draw_slot_group(GContext *ctx, SlotDescriptor *slots, int count,
@@ -237,7 +238,8 @@ static void draw_slot_group(GContext *ctx, SlotDescriptor *slots, int count,
       draw_time_with_ampm(ctx, s, y, width);
     } else {
       draw_text_with_halo(ctx, s->text, s->font,
-                          GRect(0, y - s->offset, width, s->height), s->color);
+                          GRect(0, y - s->offset, width, s->height), s->color,
+                          s->outline);
     }
     y += s->height + LINE_PADDING;
   }
@@ -246,12 +248,9 @@ static void draw_slot_group(GContext *ctx, SlotDescriptor *slots, int count,
 void info_layout_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
 
-  // Fonts are chosen per line from each entry's size (see info_font_for_size /
-  // time_font_for_size); only the colours are decided up front.
-  // ---- Color selection ----
-  GColor timeColor = globalSettings.timeColor;
-  GColor primaryColor = globalSettings.subtextPrimaryColor;
-  GColor secondaryColor = globalSettings.subtextSecondaryColor;
+  // Fonts and colours are chosen per line: the font from each entry's size (see
+  // info_font_for_size / time_font_for_size) and the colour from the per-line
+  // globalSettings.lineColor[id].
 
   // ---- Build ordered slot list from the configurable layout ----
 #define MAX_SLOTS INFO_SLOT_COUNT
@@ -262,7 +261,7 @@ void info_layout_update_proc(Layer *layer, GContext *ctx) {
   bool time_pushed = false;
 
 // Helper macro to push a slot
-#define PUSH_SLOT(txt, fnt, h, off, col, grp)                                  \
+#define PUSH_SLOT(txt, fnt, h, off, col, out, grp)                             \
   do {                                                                         \
     if (num_slots < MAX_SLOTS) {                                               \
       slots[num_slots].text = (txt);                                           \
@@ -270,6 +269,7 @@ void info_layout_update_proc(Layer *layer, GContext *ctx) {
       slots[num_slots].height = (h);                                           \
       slots[num_slots].offset = (off);                                         \
       slots[num_slots].color = (col);                                          \
+      slots[num_slots].outline = (out);                                        \
       slots[num_slots].group = (grp);                                          \
       num_slots++;                                                             \
     }                                                                          \
@@ -284,30 +284,44 @@ void info_layout_update_proc(Layer *layer, GContext *ctx) {
       case INFO_SLOT_UPPER_SECONDARY:
         if (!s_quick_view_visible && widgetTextUS[0] != '\0') {
           font = info_font_for_size(size, &fh, &fo);
-          PUSH_SLOT(widgetTextUS, font, fh, fo, secondaryColor, group);
+          PUSH_SLOT(widgetTextUS, font, fh, fo,
+                    globalSettings.lineColor[INFO_SLOT_UPPER_SECONDARY],
+                    globalSettings.lineOutlineColor[INFO_SLOT_UPPER_SECONDARY],
+                    group);
         }
         break;
       case INFO_SLOT_UPPER_PRIMARY:
         if (widgetTextUP[0] != '\0') {
           font = info_font_for_size(size, &fh, &fo);
-          PUSH_SLOT(widgetTextUP, font, fh, fo, primaryColor, group);
+          PUSH_SLOT(widgetTextUP, font, fh, fo,
+                    globalSettings.lineColor[INFO_SLOT_UPPER_PRIMARY],
+                    globalSettings.lineOutlineColor[INFO_SLOT_UPPER_PRIMARY],
+                    group);
         }
         break;
       case INFO_SLOT_TIME:
         font = time_font_for_size(size, &fh, &fo);
-        PUSH_SLOT(s_time_text, font, fh, fo, timeColor, group);
+        PUSH_SLOT(s_time_text, font, fh, fo,
+                  globalSettings.lineColor[INFO_SLOT_TIME],
+                  globalSettings.lineOutlineColor[INFO_SLOT_TIME], group);
         time_pushed = true;
         break;
       case INFO_SLOT_LOWER_PRIMARY:
         if (widgetTextLP[0] != '\0') {
           font = info_font_for_size(size, &fh, &fo);
-          PUSH_SLOT(widgetTextLP, font, fh, fo, primaryColor, group);
+          PUSH_SLOT(widgetTextLP, font, fh, fo,
+                    globalSettings.lineColor[INFO_SLOT_LOWER_PRIMARY],
+                    globalSettings.lineOutlineColor[INFO_SLOT_LOWER_PRIMARY],
+                    group);
         }
         break;
       case INFO_SLOT_LOWER_SECONDARY:
         if (!s_quick_view_visible && widgetTextLS[0] != '\0') {
           font = info_font_for_size(size, &fh, &fo);
-          PUSH_SLOT(widgetTextLS, font, fh, fo, secondaryColor, group);
+          PUSH_SLOT(widgetTextLS, font, fh, fo,
+                    globalSettings.lineColor[INFO_SLOT_LOWER_SECONDARY],
+                    globalSettings.lineOutlineColor[INFO_SLOT_LOWER_SECONDARY],
+                    group);
         }
         break;
     }
@@ -316,7 +330,10 @@ void info_layout_update_proc(Layer *layer, GContext *ctx) {
   if (!time_pushed) {
     int fh = 0, fo = 0;
     GFont font = time_font_for_size(INFO_SIZE_DEFAULT, &fh, &fo);
-    PUSH_SLOT(s_time_text, font, fh, fo, timeColor, INFO_GROUP_CENTER);
+    PUSH_SLOT(s_time_text, font, fh, fo,
+              globalSettings.lineColor[INFO_SLOT_TIME],
+              globalSettings.lineOutlineColor[INFO_SLOT_TIME],
+              INFO_GROUP_CENTER);
   }
 
 #undef PUSH_SLOT

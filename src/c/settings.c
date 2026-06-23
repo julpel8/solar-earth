@@ -13,10 +13,9 @@ Settings globalSettings;
 // numbers for users already on the keyed format.
 // ---------------------------------------------------------------------------
 enum {
-  PK_TIME_COLOR = 100,
-  PK_SUBTEXT_PRIMARY_COLOR,        // 101
-  PK_SUBTEXT_SECONDARY_COLOR,      // 102
-  PK_BG_COLOR,                     // 103
+  // 100-102 reserved (former per-type SETTING_TIME/SUBTEXT_* colours; text colour
+  // is now per-line, stored at PK_LINE_COLOR_0..4 below).
+  PK_BG_COLOR = 103,
   // 104-108 reserved (former SETTING_NIGHT_* / USE_NIGHT_THEME)
   PK_USE_LARGE_FONTS = 109,
   PK_SHOW_LEADING_ZERO,            // 110
@@ -35,6 +34,17 @@ enum {
   PK_WIDGET_UPPER_PRIMARY,         // 123
   PK_WIDGET_LOWER_PRIMARY,         // 124
   PK_WIDGET_LOWER_SECONDARY,       // 125
+  // 126 reserved (former global SETTING_OUTLINE_COLOR; outline is now per-line).
+  PK_LINE_COLOR_0 = 127,           // must stay contiguous: see load/save
+  PK_LINE_COLOR_1,                 // 128
+  PK_LINE_COLOR_2,                 // 129
+  PK_LINE_COLOR_3,                 // 130
+  PK_LINE_COLOR_4,                 // 131
+  PK_LINE_OUTLINE_0,               // 132  must stay contiguous: see load/save
+  PK_LINE_OUTLINE_1,               // 133
+  PK_LINE_OUTLINE_2,               // 134
+  PK_LINE_OUTLINE_3,               // 135
+  PK_LINE_OUTLINE_4,               // 136
 };
 
 // ---------------------------------------------------------------------------
@@ -135,9 +145,16 @@ static void persist_load_str(uint32_t key, char *buf, size_t buf_len) {
 static void set_defaults(void) {
   memset(&globalSettings, 0, sizeof(globalSettings));
 
-  globalSettings.timeColor = DEFAULT_TIME_COLOR;
-  globalSettings.subtextPrimaryColor = DEFAULT_SUBTEXT_PRIMARY_COLOR;
-  globalSettings.subtextSecondaryColor = DEFAULT_SUBTEXT_SECONDARY_COLOR;
+  // Per-line defaults reproduce the legacy look (see settings.h):
+  // 0 upper-secondary, 1 upper-primary, 2 time, 3 lower-primary, 4 lower-secondary.
+  globalSettings.lineColor[0] = DEFAULT_SUBTEXT_SECONDARY_COLOR;
+  globalSettings.lineColor[1] = DEFAULT_SUBTEXT_PRIMARY_COLOR;
+  globalSettings.lineColor[2] = DEFAULT_TIME_COLOR;
+  globalSettings.lineColor[3] = DEFAULT_SUBTEXT_PRIMARY_COLOR;
+  globalSettings.lineColor[4] = DEFAULT_SUBTEXT_SECONDARY_COLOR;
+  for (int i = 0; i < INFO_LINE_COUNT; i++) {
+    globalSettings.lineOutlineColor[i] = DEFAULT_OUTLINE_COLOR;
+  }
   globalSettings.bgColor = DEFAULT_BG_COLOR;
 
   globalSettings.useLargeFonts = false;
@@ -173,12 +190,12 @@ static void set_defaults(void) {
 }
 
 static void load_from_keys(void) {
-  globalSettings.timeColor =
-      persist_get_color(PK_TIME_COLOR, globalSettings.timeColor);
-  globalSettings.subtextPrimaryColor =
-      persist_get_color(PK_SUBTEXT_PRIMARY_COLOR, globalSettings.subtextPrimaryColor);
-  globalSettings.subtextSecondaryColor = persist_get_color(
-      PK_SUBTEXT_SECONDARY_COLOR, globalSettings.subtextSecondaryColor);
+  for (int i = 0; i < INFO_LINE_COUNT; i++) {
+    globalSettings.lineColor[i] =
+        persist_get_color(PK_LINE_COLOR_0 + i, globalSettings.lineColor[i]);
+    globalSettings.lineOutlineColor[i] = persist_get_color(
+        PK_LINE_OUTLINE_0 + i, globalSettings.lineOutlineColor[i]);
+  }
   globalSettings.bgColor = persist_get_color(PK_BG_COLOR, globalSettings.bgColor);
 
   globalSettings.useLargeFonts =
@@ -231,9 +248,9 @@ static void migrate_from_legacy(void) {
     if (rd > 0) {
       persist_read_data(LEGACY_SETTINGS_PERSIST_KEY, &ls, rd);
 
-      globalSettings.timeColor = ls.timeColor;
-      globalSettings.subtextPrimaryColor = ls.subtextPrimaryColor;
-      globalSettings.subtextSecondaryColor = ls.subtextSecondaryColor;
+      // Legacy text colours were black (the old renderer forced white anyway),
+      // so migrating them would make text invisible now that colours are
+      // honoured. Keep the light per-line defaults instead; only bg migrates.
       globalSettings.bgColor = ls.bgColor;
       globalSettings.useLargeFonts = ls.useLargeFonts;
       globalSettings.showLeadingZero = ls.showLeadingZero;
@@ -313,10 +330,10 @@ void Settings_loadFromStorage() {
 void Settings_saveToStorage() {
   Settings_updateDynamicSettings();
 
-  persist_put_color(PK_TIME_COLOR, globalSettings.timeColor);
-  persist_put_color(PK_SUBTEXT_PRIMARY_COLOR, globalSettings.subtextPrimaryColor);
-  persist_put_color(PK_SUBTEXT_SECONDARY_COLOR,
-                    globalSettings.subtextSecondaryColor);
+  for (int i = 0; i < INFO_LINE_COUNT; i++) {
+    persist_put_color(PK_LINE_COLOR_0 + i, globalSettings.lineColor[i]);
+    persist_put_color(PK_LINE_OUTLINE_0 + i, globalSettings.lineOutlineColor[i]);
+  }
   persist_put_color(PK_BG_COLOR, globalSettings.bgColor);
 
   persist_write_bool(PK_USE_LARGE_FONTS, globalSettings.useLargeFonts);
@@ -404,9 +421,6 @@ uint16_t settings_earth_update_seconds(void) {
 
 ColorTheme getCurrentColorTheme() {
   ColorTheme theme;
-  theme.timeColor = globalSettings.timeColor;
-  theme.subtextPrimaryColor = globalSettings.subtextPrimaryColor;
-  theme.subtextSecondaryColor = globalSettings.subtextSecondaryColor;
   theme.bgColor = globalSettings.bgColor;
   return theme;
 }

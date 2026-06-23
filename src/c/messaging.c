@@ -28,12 +28,15 @@ void messaging_init(void (*processed_callback)(void),
 void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   APP_LOG(APP_LOG_LEVEL_INFO, "AppMessage inbox received");
 
-  // text colors
-  Tuple *timeColor_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_TIME_COLOR);
-  Tuple *subTextPrimaryColor_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_SUBTEXT_PRIMARY_COLOR);
-  Tuple *subTextSecondaryColor_tuple =
-      dict_find(iterator, MESSAGE_KEY_SETTING_SUBTEXT_SECONDARY_COLOR);
+  // text colors — fill and outline, one per line id (0..INFO_LINE_COUNT-1)
+  const uint32_t lineColorKeys[INFO_LINE_COUNT] = {
+      MESSAGE_KEY_SETTING_LINE_COLOR_0, MESSAGE_KEY_SETTING_LINE_COLOR_1,
+      MESSAGE_KEY_SETTING_LINE_COLOR_2, MESSAGE_KEY_SETTING_LINE_COLOR_3,
+      MESSAGE_KEY_SETTING_LINE_COLOR_4};
+  const uint32_t lineOutlineKeys[INFO_LINE_COUNT] = {
+      MESSAGE_KEY_SETTING_LINE_OUTLINE_0, MESSAGE_KEY_SETTING_LINE_OUTLINE_1,
+      MESSAGE_KEY_SETTING_LINE_OUTLINE_2, MESSAGE_KEY_SETTING_LINE_OUTLINE_3,
+      MESSAGE_KEY_SETTING_LINE_OUTLINE_4};
   Tuple *bgColor_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_BG_COLOR);
 
   Tuple *useLargeFonts_tuple =
@@ -77,18 +80,17 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   Tuple *region_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_REGION);
   Tuple *infoLayout_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_INFO_LAYOUT);
 
-  if (timeColor_tuple != NULL) {
-    globalSettings.timeColor = GColorFromHEX(timeColor_tuple->value->int32);
-  }
-
-  if (subTextPrimaryColor_tuple != NULL) {
-    globalSettings.subtextPrimaryColor =
-        GColorFromHEX(subTextPrimaryColor_tuple->value->int32);
-  }
-
-  if (subTextSecondaryColor_tuple != NULL) {
-    globalSettings.subtextSecondaryColor =
-        GColorFromHEX(subTextSecondaryColor_tuple->value->int32);
+  for (int i = 0; i < INFO_LINE_COUNT; i++) {
+    Tuple *lineColor_tuple = dict_find(iterator, lineColorKeys[i]);
+    if (lineColor_tuple != NULL) {
+      globalSettings.lineColor[i] =
+          GColorFromHEX(lineColor_tuple->value->int32);
+    }
+    Tuple *lineOutline_tuple = dict_find(iterator, lineOutlineKeys[i]);
+    if (lineOutline_tuple != NULL) {
+      globalSettings.lineOutlineColor[i] =
+          GColorFromHEX(lineOutline_tuple->value->int32);
+    }
   }
 
   if (bgColor_tuple != NULL) {

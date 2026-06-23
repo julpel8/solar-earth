@@ -16,29 +16,42 @@
 // Each info-layout entry is "id:group:size" (e.g. "2:1:1"); five entries plus
 // commas need 30 bytes, so allow a little headroom.
 #define INFO_LAYOUT_LEN 32
-// id:group:size per line. size 0/1/2 = S/M/L. Secondary lines (0,4) small,
+// id:group:size per line. size 0/1/2/3 = S/M/L/XL. Secondary lines (0,4) small,
 // primary lines (1,3) and the time (2) medium.
 #define DEFAULT_INFO_LAYOUT "0:0:0,1:0:1,2:1:1,3:2:1,4:2:0"
 
-// Per-line text size (S/M/L). Stored as the third field of each info-layout
+// Per-line text size (S/M/L/XL). Stored as the third field of each info-layout
 // entry; the time line maps these to a proportionally larger font family.
 #define INFO_SIZE_S 0
 #define INFO_SIZE_M 1
 #define INFO_SIZE_L 2
+#define INFO_SIZE_XL 3
 #define INFO_SIZE_DEFAULT INFO_SIZE_M
 
+// Number of line slots (must match INFO_SLOT_COUNT in info_layout.c). Each line
+// id (0 upper-secondary, 1 upper-primary, 2 time, 3 lower-primary,
+// 4 lower-secondary) owns its own text colour in lineColor[].
+#define INFO_LINE_COUNT 5
+
 // default settings
+// Text sits over the globe, so the defaults reproduce the legacy look: light
+// fills with a black outline (see DEFAULT_OUTLINE_COLOR). These three macros are
+// the per-line colour defaults: the time line uses TIME, the primary lines (1,3)
+// use PRIMARY, the secondary lines (0,4) use SECONDARY.
 #ifdef PBL_COLOR
-#define DEFAULT_TIME_COLOR GColorBlack
-#define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
-#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorDarkGray
+#define DEFAULT_TIME_COLOR GColorWhite
+#define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorWhite
+#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorLightGray
 #define DEFAULT_BG_COLOR GColorBlack
 #else
-#define DEFAULT_TIME_COLOR GColorBlack
-#define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorBlack
-#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorBlack
+#define DEFAULT_TIME_COLOR GColorWhite
+#define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorWhite
+#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorWhite
 #define DEFAULT_BG_COLOR GColorBlack
 #endif
+
+// Default outline (halo) colour behind each text line.
+#define DEFAULT_OUTLINE_COLOR GColorBlack
 
 typedef enum { TEMP_UNIT_CELSIUS = 0, TEMP_UNIT_FAHRENHEIT = 1 } TempUnitType;
 
@@ -49,21 +62,19 @@ typedef enum {
   TIME_FORMAT_12H_AMPM = 3   // force 12-hour with AM/PM suffix on the main time
 } TimeFormatType;
 
-// Color theme struct containing the resolved color fields.
+// Color theme struct. Only the background is resolved here now; text colours are
+// per-line (see Settings.lineColor) and read directly by info_layout.
 typedef struct {
-  GColor timeColor;
-  GColor subtextPrimaryColor;
-  GColor subtextSecondaryColor;
   GColor bgColor;
 } ColorTheme;
 
 // Live settings. Persistence is per-field (settings.c), so this struct's layout
 // is free to change — add or remove fields without a migration.
 typedef struct {
-  // text colors
-  GColor timeColor;
-  GColor subtextPrimaryColor;
-  GColor subtextSecondaryColor;
+  // Per-line text fill and outline colour, indexed by line id
+  // (0..INFO_LINE_COUNT-1).
+  GColor lineColor[INFO_LINE_COUNT];
+  GColor lineOutlineColor[INFO_LINE_COUNT];
   GColor bgColor;
 
   bool useLargeFonts;

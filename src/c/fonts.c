@@ -12,6 +12,10 @@ GFont time_font_for_size(uint8_t size, int *height, int *offset) {
       *height = FONT_TIME_SIZE_L_HEIGHT;
       *offset = FONT_TIME_SIZE_L_OFFSET;
       return fonts_get_system_font(FONT_TIME_SIZE_L);
+    case INFO_SIZE_XL:
+      *height = FONT_TIME_SIZE_XL_HEIGHT;
+      *offset = FONT_TIME_SIZE_XL_OFFSET;
+      return fonts_get_system_font(FONT_TIME_SIZE_XL);
     default:
       *height = FONT_TIME_SIZE_M_HEIGHT;
       *offset = FONT_TIME_SIZE_M_OFFSET;
@@ -29,6 +33,10 @@ GFont info_font_for_size(uint8_t size, int *height, int *offset) {
       *height = FONT_INFO_SIZE_L_HEIGHT;
       *offset = FONT_INFO_SIZE_L_OFFSET;
       return fonts_get_system_font(FONT_INFO_SIZE_L);
+    case INFO_SIZE_XL:
+      *height = FONT_INFO_SIZE_XL_HEIGHT;
+      *offset = FONT_INFO_SIZE_XL_OFFSET;
+      return fonts_get_system_font(FONT_INFO_SIZE_XL);
     default:
       *height = FONT_INFO_SIZE_M_HEIGHT;
       *offset = FONT_INFO_SIZE_M_OFFSET;

@@ -41,7 +41,7 @@
 #ifdef PBL_COLOR
 #define DEFAULT_TIME_COLOR GColorWhite
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorWhite
-#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorLightGray
+#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorWhite
 #define DEFAULT_BG_COLOR GColorBlack
 #else
 #define DEFAULT_TIME_COLOR GColorWhite
@@ -52,6 +52,15 @@
 
 // Default outline (halo) colour behind each text line.
 #define DEFAULT_OUTLINE_COLOR GColorBlack
+
+// Default globe colours (RGB hex, quantised to Pebble's 64-colour space at
+// runtime by GColorFromHEX). These reproduce the legacy hardcoded palette:
+// vivid blue/green day side, dark blue/green night side, amber city lights.
+#define DEFAULT_GLOBE_DAY_OCEAN_HEX 0x0000FF
+#define DEFAULT_GLOBE_DAY_LAND_HEX 0x00FF00
+#define DEFAULT_GLOBE_NIGHT_OCEAN_HEX 0x000055
+#define DEFAULT_GLOBE_NIGHT_LAND_HEX 0x005500
+#define DEFAULT_GLOBE_CITY_HEX 0xFFFF55
 
 typedef enum { TEMP_UNIT_CELSIUS = 0, TEMP_UNIT_FAHRENHEIT = 1 } TempUnitType;
 
@@ -76,6 +85,13 @@ typedef struct {
   GColor lineColor[INFO_LINE_COUNT];
   GColor lineOutlineColor[INFO_LINE_COUNT];
   GColor bgColor;
+
+  // Globe colours (day ocean/land, night ocean/land, night city lights).
+  GColor globeDayOcean;
+  GColor globeDayLand;
+  GColor globeNightOcean;
+  GColor globeNightLand;
+  GColor globeCity;
 
   bool useLargeFonts;
   bool showLeadingZero;

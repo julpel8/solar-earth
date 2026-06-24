@@ -39,6 +39,17 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
       MESSAGE_KEY_SETTING_LINE_OUTLINE_4};
   Tuple *bgColor_tuple = dict_find(iterator, MESSAGE_KEY_SETTING_BG_COLOR);
 
+  Tuple *globeDayOcean_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_GLOBE_DAY_OCEAN);
+  Tuple *globeDayLand_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_GLOBE_DAY_LAND);
+  Tuple *globeNightOcean_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_GLOBE_NIGHT_OCEAN);
+  Tuple *globeNightLand_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_GLOBE_NIGHT_LAND);
+  Tuple *globeCity_tuple =
+      dict_find(iterator, MESSAGE_KEY_SETTING_GLOBE_CITY);
+
   Tuple *useLargeFonts_tuple =
       dict_find(iterator, MESSAGE_KEY_SETTING_USE_LARGE_FONTS);
 
@@ -95,6 +106,26 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
 
   if (bgColor_tuple != NULL) {
     globalSettings.bgColor = GColorFromHEX(bgColor_tuple->value->int32);
+  }
+
+  if (globeDayOcean_tuple != NULL) {
+    globalSettings.globeDayOcean =
+        GColorFromHEX(globeDayOcean_tuple->value->int32);
+  }
+  if (globeDayLand_tuple != NULL) {
+    globalSettings.globeDayLand =
+        GColorFromHEX(globeDayLand_tuple->value->int32);
+  }
+  if (globeNightOcean_tuple != NULL) {
+    globalSettings.globeNightOcean =
+        GColorFromHEX(globeNightOcean_tuple->value->int32);
+  }
+  if (globeNightLand_tuple != NULL) {
+    globalSettings.globeNightLand =
+        GColorFromHEX(globeNightLand_tuple->value->int32);
+  }
+  if (globeCity_tuple != NULL) {
+    globalSettings.globeCity = GColorFromHEX(globeCity_tuple->value->int32);
   }
 
   if (useLargeFonts_tuple != NULL) {

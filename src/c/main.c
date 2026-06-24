@@ -103,14 +103,18 @@ static void update_clock() {
 // settings might have changed, so recalculate solar data and refresh screen
 void onSettingsChanged() {
   bool regionChanged = earth_render_set_region(globalSettings.region);
+  bool colorsChanged = earth_render_set_colors();
 
   earth_render_set_bg(getCurrentColorTheme().bgColor);
 
-  if (windowLayer && regionChanged) {
+  // Both set_region and set_colors free the bitmap the earth layer points at;
+  // reposition synchronously rebuilds and re-binds it before any repaint, so we
+  // must do it for either change (not just region) to avoid a dangling pointer.
+  if (windowLayer && (regionChanged || colorsChanged)) {
     quickViewLayerReposition();
   }
 
-  if (regionChanged) {
+  if (regionChanged || colorsChanged) {
     earth_render_force_update(time(NULL));
   }
 

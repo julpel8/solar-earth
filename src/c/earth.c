@@ -13,18 +13,12 @@
 #define NIGHT_IDX_CITY_DIM 10
 #define NIGHT_IDX_CITY_BRIGHT 11
 
-// Single source of truth for every displayed colour (RGB, quantised to
-// Pebble's 64-colour space at runtime by GColorFromHEX). Vivid palette
-// inspired by Joshua Simmons' Blue Pebble (#0055FF ocean, #00AA00 land) for
-// strong contrast on the 64-colour display. Night land mirrors the day-land
-// hue (dark green); cities are warm amber -> bright yellow so they read
-// against the dark globe.
-#define DAY_OCEAN_HEX 0x0055FF
-#define DAY_LAND_HEX 0x00AA00
-#define NIGHT_OCEAN_HEX 0x000055
-#define NIGHT_LAND_HEX 0x005500
-#define NIGHT_CITY_DIM_HEX 0x005500
-#define NIGHT_CITY_BRIGHT_HEX 0xFFFF55
+// Every displayed colour is user-configurable (globalSettings.globe*); the
+// defaults in settings.h reproduce the original vivid palette inspired by
+// Joshua Simmons' Blue Pebble. Dim city lights reuse the night-land colour, so
+// only five colours are exposed. prepare_palette() reads these settings, and
+// earth_render_set_colors() reapplies them (by reloading the region) whenever a
+// setting changes.
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -125,10 +119,12 @@ static uint8_t city_index_for_night_color(GColor color) {
 }
 
 static void prepare_palette(GColor *day_pal, GColor *night_pal) {
-  day_pal[NIGHT_IDX_OCEAN] = GColorFromHEX(NIGHT_OCEAN_HEX);
-  day_pal[NIGHT_IDX_LAND] = GColorFromHEX(NIGHT_LAND_HEX);
-  day_pal[NIGHT_IDX_CITY_DIM] = GColorFromHEX(NIGHT_CITY_DIM_HEX);
-  day_pal[NIGHT_IDX_CITY_BRIGHT] = GColorFromHEX(NIGHT_CITY_BRIGHT_HEX);
+  // Night colours live in the fixed upper palette slots. Dim cities reuse the
+  // night-land colour, so only five user-facing colours exist.
+  day_pal[NIGHT_IDX_OCEAN] = globalSettings.globeNightOcean;
+  day_pal[NIGHT_IDX_LAND] = globalSettings.globeNightLand;
+  day_pal[NIGHT_IDX_CITY_DIM] = globalSettings.globeNightLand;
+  day_pal[NIGHT_IDX_CITY_BRIGHT] = globalSettings.globeCity;
 
   for (int i = 0; i < 16; i++) {
     s_day_to_night_base[i] = NIGHT_IDX_OCEAN;
@@ -136,14 +132,16 @@ static void prepare_palette(GColor *day_pal, GColor *night_pal) {
   }
 
   for (int i = 0; i < N_DAY_COLOURS; i++) {
+    // Classify against the *original* PNG palette (ocean vs land, city vs dark)
+    // before overwriting any RGB, so user colours can't skew the classification.
     bool ocean = is_day_ocean_color(day_pal[i]);
     s_day_to_night_base[i] = ocean ? NIGHT_IDX_OCEAN : NIGHT_IDX_LAND;
     s_night_to_city[i] = city_index_for_night_color(night_pal[i]);
     // C has the final say on day colours: overwrite whatever the resource
     // compiler emitted, but leave the disc's transparent background alone.
     if (day_pal[i].a != 0) {
-      day_pal[i] =
-          ocean ? GColorFromHEX(DAY_OCEAN_HEX) : GColorFromHEX(DAY_LAND_HEX);
+      day_pal[i] = ocean ? globalSettings.globeDayOcean
+                         : globalSettings.globeDayLand;
     }
   }
 }
@@ -297,6 +295,18 @@ static bool s_earth_display_dirty = true;
 static uint8_t s_loaded_earth_region = 0xFF;
 static GRect s_center_frame;
 
+// Snapshot of the globe colours baked into the currently loaded bitmap, used to
+// detect when a config change requires reloading the region to re-apply them.
+static GColor s_loaded_globe_colors[5];
+
+static void snapshot_globe_colors(GColor out[5]) {
+  out[0] = globalSettings.globeDayOcean;
+  out[1] = globalSettings.globeDayLand;
+  out[2] = globalSettings.globeNightOcean;
+  out[3] = globalSettings.globeNightLand;
+  out[4] = globalSettings.globeCity;
+}
+
 static AppTimer *s_earth_update_timer = NULL;
 static time_t s_last_earth_update_time = 0;
 
@@ -442,6 +452,7 @@ static void earth_update_timer_callback(void *data) {
 void earth_render_init(Layer *parent, GRect frame, GColor bg, uint8_t region) {
   s_earth_bitmap = earth_init(region);
   s_loaded_earth_region = region;
+  snapshot_globe_colors(s_loaded_globe_colors);
   s_center_frame = frame;
 
   s_earth_layer = bitmap_layer_create(frame);
@@ -482,6 +493,28 @@ bool earth_render_set_region(uint8_t region) {
   destroy_earth_display_bitmap();
   s_earth_bitmap = earth_set_region(region);
   s_loaded_earth_region = region;
+  // The fresh bitmap bakes in the current globe colours.
+  snapshot_globe_colors(s_loaded_globe_colors);
+  s_last_earth_update_time = 0;
+  return true;
+}
+
+bool earth_render_set_colors(void) {
+  GColor current[5];
+  snapshot_globe_colors(current);
+
+  bool changed = !s_earth_bitmap;
+  for (int i = 0; i < 5 && !changed; i++) {
+    if (!gcolor_equal(current[i], s_loaded_globe_colors[i])) changed = true;
+  }
+  if (!changed) return false;
+
+  // prepare_palette() classifies pixels against the original PNG palette, so we
+  // must reload the region from resources rather than re-paint the mutated one.
+  cancel_earth_update_timer();
+  destroy_earth_display_bitmap();
+  s_earth_bitmap = earth_set_region(s_loaded_earth_region);
+  snapshot_globe_colors(s_loaded_globe_colors);
   s_last_earth_update_time = 0;
   return true;
 }

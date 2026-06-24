@@ -41,7 +41,7 @@
 #ifdef PBL_COLOR
 #define DEFAULT_TIME_COLOR GColorWhite
 #define DEFAULT_SUBTEXT_PRIMARY_COLOR GColorWhite
-#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorLightGray
+#define DEFAULT_SUBTEXT_SECONDARY_COLOR GColorWhite
 #define DEFAULT_BG_COLOR GColorBlack
 #else
 #define DEFAULT_TIME_COLOR GColorWhite

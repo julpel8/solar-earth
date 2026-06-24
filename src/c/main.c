@@ -107,7 +107,10 @@ void onSettingsChanged() {
 
   earth_render_set_bg(getCurrentColorTheme().bgColor);
 
-  if (windowLayer && regionChanged) {
+  // Both set_region and set_colors free the bitmap the earth layer points at;
+  // reposition synchronously rebuilds and re-binds it before any repaint, so we
+  // must do it for either change (not just region) to avoid a dangling pointer.
+  if (windowLayer && (regionChanged || colorsChanged)) {
     quickViewLayerReposition();
   }
 

@@ -56,8 +56,8 @@
 // Default globe colours (RGB hex, quantised to Pebble's 64-colour space at
 // runtime by GColorFromHEX). These reproduce the legacy hardcoded palette:
 // vivid blue/green day side, dark blue/green night side, amber city lights.
-#define DEFAULT_GLOBE_DAY_OCEAN_HEX 0x0055FF
-#define DEFAULT_GLOBE_DAY_LAND_HEX 0x00AA00
+#define DEFAULT_GLOBE_DAY_OCEAN_HEX 0x0000FF
+#define DEFAULT_GLOBE_DAY_LAND_HEX 0x00FF00
 #define DEFAULT_GLOBE_NIGHT_OCEAN_HEX 0x000055
 #define DEFAULT_GLOBE_NIGHT_LAND_HEX 0x005500
 #define DEFAULT_GLOBE_CITY_HEX 0xFFFF55

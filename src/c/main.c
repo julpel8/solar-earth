@@ -14,7 +14,7 @@
 
 // Heartbeat timer: the watch requests data from the phone on this interval
 #define UPDATE_REQUEST_INTERVAL_MS (30 * 60 * 1000) // 30 minutes
-#define UPDATE_REQUEST_INITIAL_DELAY_MS (3 * 1000)   // 3 seconds after startup
+#define UPDATE_REQUEST_INITIAL_DELAY_MS (1 * 1000)   // 1 second after startup
 #define UPDATE_REQUEST_RETRY_MS (30 * 1000)          // fast retry after outbox fail
 
 // windows and layers
@@ -93,8 +93,9 @@ static void update_clock() {
   window_set_background_color(mainWindow, currentTheme.bgColor);
   earth_render_set_bg(currentTheme.bgColor);
 
-  // Recompute the globe day/night shading off the startup path. The trigonometry
-  // is too expensive to run synchronously on the UI thread at launch.
+  // Refresh the globe day/night shading once the cadence has elapsed; runs
+  // async (sliced) so the minute tick never stalls. Launch-time shading is done
+  // synchronously in earth_render_init, so this is a no-op on the first tick.
   earth_render_maybe_update(now);
 
   layer_mark_dirty(centerLayer);

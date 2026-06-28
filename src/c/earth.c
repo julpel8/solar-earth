@@ -27,6 +27,15 @@
 #define TWO_PI ((float)(M_PI * 2.0))
 #define DEG2RAD ((float)(M_PI / 180.0))
 
+// The day/night refresh cadence is user-configurable; see
+// settings_earth_update_seconds(). Slicing the work keeps the UI responsive.
+#define EARTH_UPDATE_SLICE_DELAY_MS 1
+#define EARTH_UPDATE_ROWS_PER_SLICE 15
+
+// Globe display size: scaled (preserving aspect ratio) to span the centre frame
+// width minus a small side margin so the globe never bleeds to the very edge.
+#define EARTH_SIDE_MARGIN 3
+
 static GBitmap *s_day, *s_night, *s_combined;
 static uint8_t *s_day_data, *s_night_data, *s_comb_data;
 static unsigned int s_bpr, s_rows, s_cols;
@@ -57,24 +66,6 @@ static const RegionDef REGIONS[EARTH_NUM_REGIONS] = {
     {RESOURCE_ID_BLUE_MARBLE_ASIA, RESOURCE_ID_BLACK_MARBLE_ASIA, 35, 100},
     {RESOURCE_ID_BLUE_MARBLE_OCEANIA, RESOURCE_ID_BLACK_MARBLE_OCEANIA, -25, 135},
 };
-
-static float fast_sqrtf(float x) {
-  if (x <= 0.0f) return 0.0f;
-
-  // Avoid the SDK libm sqrtf path, which faults on-device for this app.
-  union {
-    float f;
-    uint32_t i;
-  } conv;
-
-  float half = 0.5f * x;
-  conv.f = x;
-  conv.i = 0x5f3759df - (conv.i >> 1);
-  float inv = conv.f;
-  inv = inv * (1.5f - half * inv * inv);
-  inv = inv * (1.5f - half * inv * inv);
-  return x * inv;
-}
 
 static float wrap_pi(float x) {
   while (x > (float)M_PI) x -= TWO_PI;
@@ -152,6 +143,26 @@ static uint8_t night_index_for_pixel(uint8_t day_index, uint8_t night_index) {
   return s_day_to_night_base[day_index & 0x0F];
 }
 
+// Bake every night pixel into its final palette index once, in place in
+// s_night_data. After this the shading loop just copies night nibbles for dark
+// pixels -- no per-pixel classification in the hot path. Safe in place: each
+// pixel only reads its own day + night nibble. Pixels outside the disc get a
+// junk index but are never copied (the disc test in earth_update_step skips
+// them).
+static void bake_night_pixels(void) {
+  for (unsigned int i = 0; i < s_bpr * s_rows; i++) {
+    uint8_t day_byte = s_day_data[i];
+    uint8_t night_byte = s_night_data[i];
+    uint8_t out = night_byte;
+    for (int sub = 0; sub < 2; sub++) {
+      out = pixel4_set(out, sub,
+                       night_index_for_pixel(pixel4_get(day_byte, sub),
+                                             pixel4_get(night_byte, sub)));
+    }
+    s_night_data[i] = out;
+  }
+}
+
 static void earth_destroy(void);
 
 static GBitmap *load_region(uint8_t region) {
@@ -180,6 +191,7 @@ static GBitmap *load_region(uint8_t region) {
   s_night_data = gbitmap_get_data(s_night);
   memcpy(s_comb_data, s_day_data, s_bpr * s_rows);
   gbitmap_set_palette(s_combined, day_pal, false);
+  bake_night_pixels();
   return s_combined;
 }
 
@@ -223,10 +235,11 @@ static bool earth_update_step(unsigned int max_rows) {
   if (!s_combined || !s_update.active) return true;
   if (max_rows == 0) max_rows = 1;
 
-  float R = s_cols / 2.0f;
   float cx = (s_cols - 1) / 2.0f;
   float cy = (s_rows - 1) / 2.0f;
-  float invR = 1.0f / R;
+  float invR = 1.0f / (s_cols / 2.0f);
+  float Sx = s_update.sun_x, Sy = s_update.sun_y, Sz = s_update.sun_z;
+  float Sz2 = Sz * Sz;
 
   unsigned int end_row = s_update.next_row + max_rows;
   if (end_row > s_rows) end_row = s_rows;
@@ -235,8 +248,7 @@ static bool earth_update_step(unsigned int max_rows) {
     float fy = (cy - (float)row) * invR;
     unsigned int rb = row * s_bpr;
     for (unsigned int byte = 0; byte < s_bpr; byte++) {
-      uint8_t day_byte = s_day_data[rb + byte];
-      uint8_t out = day_byte;                 // default: day pixels
+      uint8_t out = s_day_data[rb + byte];    // default: day pixels
       uint8_t night_byte = s_night_data[rb + byte];
       for (int sub = 0; sub < 2; sub++) {
         unsigned int col = byte * 2 + sub;
@@ -244,13 +256,18 @@ static bool earth_update_step(unsigned int max_rows) {
         float fx = ((float)col - cx) * invR;
         float r2 = fx * fx + fy * fy;
         if (r2 > 1.0f) continue;             // outside the globe -> keep (transparent)
-        float z = fast_sqrtf(1.0f - r2);
-        float dot = fx * s_update.sun_x + fy * s_update.sun_y +
-                    z * s_update.sun_z;
-        if (dot <= 0.0f) {                    // night side
-          uint8_t di = pixel4_get(day_byte, sub);
-          uint8_t ni = pixel4_get(night_byte, sub);
-          out = pixel4_set(out, sub, night_index_for_pixel(di, ni));
+        // Night test without a square root. We only need the sign of
+        //   dot = fx*Sx + fy*Sy + z*Sz,  with z = sqrt(1 - r2) >= 0.
+        // Let L = fx*Sx + fy*Sy and q = z*z = 1 - r2. Comparing squares is an
+        // exact equivalent of dot <= 0 once L's sign is handled per Sz's sign.
+        float L = fx * Sx + fy * Sy;
+        float q = 1.0f - r2;
+        bool night;
+        if (Sz > 0.0f)      night = (L <= 0.0f) && (Sz2 * q <= L * L);
+        else if (Sz < 0.0f) night = (L <= 0.0f) || (Sz2 * q >= L * L);
+        else                night = (L <= 0.0f);
+        if (night) {                          // night side: copy baked night nibble
+          out = pixel4_set(out, sub, pixel4_get(night_byte, sub));
         }
       }
       s_comb_data[rb + byte] = out;
@@ -266,6 +283,13 @@ static bool earth_update_step(unsigned int max_rows) {
   return false;
 }
 
+// Shade the whole globe in one synchronous pass. Cheap enough now (no per-pixel
+// sqrt) to run before the first paint, so the globe never flashes all-day.
+static void earth_update_all(time_t now) {
+  earth_start_update(now);
+  earth_update_step(s_rows ? s_rows : 1);
+}
+
 static void earth_destroy(void) {
   s_update.active = false;
   if (s_combined) { gbitmap_destroy(s_combined); s_combined = NULL; }
@@ -277,15 +301,6 @@ static void earth_destroy(void) {
 // Globe presentation: BitmapLayer, scaled display bitmap and the incremental
 // day/night shading timer. Builds on the globe model above.
 // ===========================================================================
-
-// The day/night refresh cadence is user-configurable; see
-// settings_earth_update_seconds(). Slicing the work keeps the UI responsive.
-#define EARTH_UPDATE_SLICE_DELAY_MS 15
-#define EARTH_UPDATE_ROWS_PER_SLICE 3
-
-// Globe display size: scaled (preserving aspect ratio) to span the centre frame
-// width minus a small side margin so the globe never bleeds to the very edge.
-#define EARTH_SIDE_MARGIN 3
 
 static BitmapLayer *s_earth_layer;   // globe disc, between centre bg and the time
 static GBitmap *s_earth_bitmap;      // source globe (the combined model bitmap)
@@ -454,6 +469,12 @@ void earth_render_init(Layer *parent, GRect frame, GColor bg, uint8_t region) {
   s_loaded_earth_region = region;
   snapshot_globe_colors(s_loaded_globe_colors);
   s_center_frame = frame;
+
+  // Shade synchronously before the first paint so the globe shows day *and*
+  // night from the very first frame -- no all-day flash at launch.
+  time_t now = time(NULL);
+  earth_update_all(now);
+  s_last_earth_update_time = now;
 
   s_earth_layer = bitmap_layer_create(frame);
   bitmap_layer_set_compositing_mode(s_earth_layer, GCompOpSet);

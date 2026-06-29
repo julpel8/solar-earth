@@ -69,6 +69,43 @@ def night_color(is_ocean, lr, lg, lb):
     return NIGHT_OCEAN if is_ocean else NIGHT_LAND
 
 
+def trim_border(img):
+    """Crop a uniform near-white frame off an equirectangular texture.
+
+    world_src ships with a ~3px white border on all sides. Sampling it near
+    the antimeridian / poles leaks white pixels that day_color() classifies as
+    land, drawing a spurious green seam on the globe limb (e.g. oceania east).
+    """
+    px = img.load()
+    W, H = img.size
+
+    def white(c):
+        c = c[:3] if isinstance(c, tuple) else (c, c, c)
+        return c[0] > 230 and c[1] > 230 and c[2] > 230
+
+    def row_white(y):
+        return all(white(px[x, y]) for x in range(0, W, max(1, W // 64)))
+
+    def col_white(x):
+        return all(white(px[x, y]) for y in range(0, H, max(1, H // 64)))
+
+    top = 0
+    while top < H // 4 and row_white(top):
+        top += 1
+    bottom = H - 1
+    while bottom > 3 * H // 4 and row_white(bottom):
+        bottom -= 1
+    left = 0
+    while left < W // 4 and col_white(left):
+        left += 1
+    right = W - 1
+    while right > 3 * W // 4 and col_white(right):
+        right -= 1
+    if (left, top, right, bottom) == (0, 0, W - 1, H - 1):
+        return img
+    return img.crop((left, top, right + 1, bottom + 1))
+
+
 def sample(px, W, H, lon, lat):
     tx = int((lon + math.pi) / (2 * math.pi) * (W - 1))
     ty = int((math.pi / 2 - lat) / math.pi * (H - 1))
@@ -123,7 +160,7 @@ def render_region(day_tex, lights_tex, name, lat0, lon0):
 
 
 def main():
-    day_tex = Image.open(DAY_SRC).convert("RGB")
+    day_tex = trim_border(Image.open(DAY_SRC).convert("RGB"))
     lights_tex = Image.open(LIGHTS_SRC).convert("RGB")
     os.makedirs(OUTDIR, exist_ok=True)
     only = sys.argv[1] if len(sys.argv) > 1 else None

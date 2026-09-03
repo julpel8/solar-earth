@@ -355,7 +355,15 @@ void info_layout_update_proc(Layer *layer, GContext *ctx) {
   int center_area_height = center_bottom - center_top;
   int center_y = center_top;
   if (center_area_height > center_height) {
-    center_y += (center_area_height - center_height) / 2;
+    // Anchor the centre group on the screen's mid-line rather than on the
+    // middle of the leftover space, so the time stays put when the top and
+    // bottom blocks have different heights. Clamp it back inside the free area
+    // when there isn't enough room.
+    center_y = (bounds.size.h - center_height) / 2;
+    if (center_y < center_top) center_y = center_top;
+    if (center_y + center_height > center_bottom) {
+      center_y = center_bottom - center_height;
+    }
   }
 
   draw_slot_group(ctx, slots, num_slots, INFO_GROUP_TOP, top_y, bounds.size.w);
